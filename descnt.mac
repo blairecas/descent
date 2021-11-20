@@ -1,0 +1,1025 @@
+	.mcall	.print .ttyin .fetch .looku .readw .close .exit
+	.enabl	LC
+	.list	MEB	; enable macro-extensions binary listing
+
+TOPCPU = 156100		; CPU RAM decompression routine addr
+TOPPPU = 076100		; PPU RAM decompression routine addr
+V12ADR = 027340		; starting vram # - 100000 for DESR12.DAT
+V00ADR = 027340		; starting vram adr - 100000 for DESR00.DAT (in PPU VRAM)
+
+; Game data files (they are compressed):
+; descpu.dat - CPU RAM    000000-156000 
+; desr12.dat - VRAM 1,2   256700-400000
+; desppu.dat - PPU RAM    000000-076000
+; desr00.dat - VRAM 0     127340-200000
+
+; readfile data
+AREA01:	.blkw	5
+DKN001:	.rad50	"DK "
+	.rad50	"DES"
+DTNAME:	.rad50	"CPU"	; radix 50 'CPU'=012525, 'PPU'=063225, 'R12'=072570, 'R00'=072516
+	.rad50	"DAT"
+BUF001:	.blkw	200
+BUF002:	.blkw	256.	; 512-byte block, file data
+
+FILNUM:	.word	0	; current file, 0-descpu.dat, 1-desr12.dat, 2-desppu.dat, 3-desr00.dat
+CURBLK:	.word	0
+MAXBLK:	.word	0
+
+ADDR12:	.word	100000	; vaddr # for planes-1,2
+ADDR00:	.word	100000	; vaddr # for plane-0
+STVR12:	.word	0	; vaddr # for starting of desr12.dat
+ENVR12:	.word	0	; same but ending # (not including)
+STVR00:	.word	0	; vaddr # for starting of desr00.dat
+ENVR00:	.word	0
+
+PPCOMM:	.WORD	0	; PPU command
+
+MSGADR:	.WORD	0	; message addr of read file error
+MSG000:	.ASCIZ	<12>/DESCENT for UKNC. Run Y/<57>/[N]?/
+MSG001:	.ASCIZ	/ERR: Device DK: not found/
+MSG002:	.ASCIZ	/ERR: Channel #7 is active/
+MSG003:	.ASCIZ	/ERR: One of data files DESxxx.DAT not found/
+MSG005:	.ASCIZ	/ERR: File read error/
+MSG010:	.ASCIZ	/ERR: PPU allocate memory failed/
+MSGCLS: .BYTE	033, 014, 110, 0
+	.EVEN
+
+; //////////////////////////////////////////////////////////////////////////////
+; // START
+; //////////////////////////////////////////////////////////////////////////////
+
+START:	.print	#MSG000			; helloworld!!111one
+	bis	#10000, @#44		; don't echo keys
+	.ttyin				; input char -> R0
+	cmp	R0, #131		; Y char
+	beq	10$
+	.exit
+99$:	; exit with error
+	mov	#100000, PPCOMM		; ask PPU to exit and cleanup
+	tst	PPCOMM
+	bne	.-4			; TODO: check timer to not wait forever
+	mtps	0
+	call	PPRELE			; release PPU memory
+	.print	MSGADR			; print error (must be set in READFL)
+	.exit
+10$:	; prepare
+	mtps	#200			; stop some interrupts (but not halt)
+	mov	#MSGCLS, MSGADR
+	.print	MSGADR			; clear screen with ESC-codes		
+
+	; run PPU code
+	mov	#1, PPCOMM		; ask PPU for 'phase 1 ready'
+	mov	#PPUSTA, R4		; run PPU code
+	mov	#<PPUEND-PPUSTA/2>, R5
+	call	PPRUN
+	tst	PPCOMM			; wait for 'ppu phase 1 ready'
+	bne	.-4			; TODO: check timer to not wait forever?
+
+	; read files and put them to VRAM
+	clr	FILNUM			; indication of DESCPU.DAT
+	mov	#012525, DTNAME		; change file name to 'descpu.dat'
+	call	READFL			; reading
+	bcs	99$
+	;
+	mov	ADDR12, STVR12		; vram 12 starting
+	inc	FILNUM			; indication of DESR12.DAT
+	mov	#072570, DTNAME		; change file name to 'desr12.dat'
+	call	READFL			; reading
+	bcs	99$			;
+	mov	ADDR12, ENVR12		; vram 12 ending (exclusive)
+	;
+	inc	FILNUM			; indication of DESPPU.DAT
+	mov	#063225, DTNAME		; change file name to 'desppu.dat'
+	call	READFL			; reading
+	bcs	99$			; 
+	;
+	mov	ADDR00, STVR00		; vram 0 starting 
+	inc	FILNUM			; indication of DESR00.DAT
+	mov	#072516, DTNAME		; change file name to 'desr00.dat'
+	call	READFL			; reading
+	bcs	99$			;
+	mov	ADDR00, ENVR00		; vram 0 ending (exclusive)
+
+	; relocate vram 1,2 part (that readed from *V12.DAT file) to the top of vram
+	clr	R2			; R2 = destination # + 1
+	mov	ENVR12, R1		; R1 = source # + 1
+	mov	R1, R3
+	sub	STVR12, R3		; R3 = length in vram #
+	mov	#176640, R4		; vram # reg
+	mov	#176642, R5		; vram data reg
+20$:	dec	R1
+	dec	R2
+	mov	R1, (R4)
+	mov	(R5), R0
+	clr	(R5)
+	mov	R2, (R4)
+	mov	R0, (R5)
+	sob	R3, 20$
+	mov	R2, STVU12		; save # for use in decompressing later
+
+	; relocate decompress routines to TOPCPU addr and run it
+	mov	#TOPCPU, SP		; 
+	mov	SP, R5			;
+	mov	PC, R4			;
+	add	#CPURE0-., R4		; start -> R4
+	mov	#CPURE1-CPURE0/2, R3	; words count
+	mov	(R4)+, (R5)+
+	sob	R3, .-2
+
+	; ask ppu for 'phase 2'
+	mov	#2, PPCOMM
+	tst	PPCOMM
+	bne	.-4
+
+	; start decompression
+	jmp	(SP)
+
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Decompressing routines 
+; //////////////////////////////////////////////////////////////////////////////
+
+; .=TOPCPU
+CPURE0:
+	; clear CPU RAM up to SP
+	clr	R0
+	mov	SP, R3
+	clc
+	ror	R3
+	clr	(R0)+
+	sob	R3, .-2
+	; prepare to decompress first part VRAM -> CPU RAM
+	clr	GetA12			; descpu.dat vram addr relative to 200000
+	clr	R2			; destination address in CPU RAM
+	call	Unpa11			; decompress first part to CPU RAM
+	; prepare to decompress second part, VRAM -> VRAM
+	mov	STVU12, R0		; make source DESR12 relative to 200000
+	bic	#100000, R0		;
+	asl	R0			;
+	mov	R0, GetA12		; DESR12 vram addr relative to 200000
+	clr	PutA12			; dest vram relative to 200000
+	call	Unpa12			; decompress second part VRAM top -> VRAM at 0
+	; move DESR12 block in vram from 100000 to V12ADR+100000
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	#177777, R2
+	mov	R2, R1
+	sub	#V12ADR, R1
+	mov	#100000, R3
+	sub	#V12ADR, R3
+10$:	mov	R1, (R4)
+	mov	(R5), R0
+	mov	R2, (R4)
+	mov	R0, (R5)
+	dec	R2
+	dec	R1
+	sob	R3, 10$
+	; all is set - jump to main CPU code
+	jmp	@#1000			; jump to 'cpu phase 3 init'
+
+STVU12:	.word	0			; vaddr # of relocated *R12.DAT file
+
+; get byte -> R1 from vaddr and advance it
+GetB12:	mov	(PC)+, R1
+GetA12:	.word	0			; vram addr rel to 200000
+	inc	GetA12
+GetR12:	sec
+	ror	R1
+	bcs	10$
+	mov	R1, @#176640
+	movb	@#176642, R1
+	return
+10$:	mov	R1, @#176640
+	movb	@#176643, R1
+	return
+
+; put R1 -> byte to dest vaddr and advance it
+PutB12:	mov	(PC)+, R2
+PutA12:	.word	0			; vram addr rel to 200000
+	inc	PutA12
+	sec
+	ror	R2
+	bcs	10$
+	mov	R2, @#176640
+	movb	R1, @#176642
+	return
+10$:	mov	R2, @#176640
+	movb	R1, @#176643
+	return
+
+; lzsa3 decompressing routines by manwe & ivanq
+; https://github.com/imachug/lzsa3
+
+; VRAM -> VRAM
+Unpa12:	CLR	R5		; no nibbles sign
+10$:	call	GetB12		; +
+	movb	R1, R3		; + movb (R1)+, R3
+	MOV	R3, R0
+	BIC	#177774, R0	; get 2 bits
+	BEQ	25$
+	CMP	R0, #3		; literals length
+	BNE	20$
+	CALL	65$
+20$:	call	GetB12		; +
+	call	PutB12		; + movb (R1)+, (R2)+
+	SOB	R0, 20$
+25$:	MOV	R3, -(SP)
+	ROLB	R3		; get 2 bits
+	ROL	R0
+	ROLB	R3
+	ROL	R0
+	ASL	R0
+	ADD	R0, PC		; run subroutine
+	BR	55$
+	BR	45$
+	BR	50$
+	CALL	60$		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+30$:	MOV	R0, R4		; save offset for future
+35$:	MOV	(SP)+, R0
+	ASR	R0
+	ASR	R0
+	BIC	#177770, R0	; get 3 bits
+	CMP	R0, #7
+	BNE	40$
+	CALL	65$
+	TSTB	R0		; match length
+	BEQ	99$
+40$:	mov	PutA12, R1	; + copy: dst - R4 -> dst, original was:
+	sub	R4, R1		; + mov r2, r3
+	call	GetR12		; + sub r4, r3
+	call	PutB12		; + movb (r3)+,(r2)+
+	inc	R0		; + inc r0
+1$:	mov	PutA12, R1	; + 1$: movb (r3)+,(r2)+
+	sub	R4, R1		; + sob r0, 1$
+	call	GetR12		; +
+	call	PutB12		; +
+	sob	R0, 1$		; +
+	BR	10$
+45$:	CLR	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+	BR	30$
+50$:	CALL	60$ 		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	SWAB	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ADD	#513., R0
+	BR	30$
+55$:	ROLB	R3
+	BCS	35$
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BR	30$
+60$:	COM	R5
+	BMI	2$
+	MOV	R5, R0
+	CLR	R5
+	BR	3$
+2$:	call	GetB12		; +
+	bicb	R1, R5		; + bicb (R1)+, R5
+	MOV	R5, R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+3$:	BIC	#177760, R0	; leave 4 low bits
+	RETURN
+65$:	MOV	R0, -(SP)	; save original value
+	CALL	60$ 		; get nibble in R0
+	BNE	75$
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BNE	70$
+	; unnecessary for short files
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	inc	SP		; skip saved R0
+	inc	SP
+	return
+70$:	ADD	#15., R0
+75$:	DEC	R0
+	ADD	(SP)+, R0	; add original value
+99$:	return
+
+; VRAM -> RAM
+Unpa11:	CLR	R5		; no nibbles sign
+10$:	call	GetB12		; +
+	movb	R1, R3		; + movb (R1)+, R3
+	MOV	R3, R0
+	BIC	#177774, R0	; get 2 bits
+	BEQ	25$
+	CMP	R0, #3		; literals length
+	BNE	20$
+	CALL	65$
+20$:	call	GetB12		;+
+	movb	R1, (R2)+	;+ movb (R1)+, (R2)+
+	SOB	R0, 20$
+25$:	MOV	R3, -(SP)
+	ROLB	R3		; get 2 bits
+	ROL	R0
+	ROLB	R3
+	ROL	R0
+	ASL	R0
+	ADD	R0, PC		; run subroutine
+	BR	55$
+	BR	45$
+	BR	50$
+	CALL	60$		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+30$:	MOV	R0, R4		; save offset for future
+35$:	MOV	(SP)+, R0
+	ASR	R0
+	ASR	R0
+	BIC	#177770, R0	; get 3 bits
+	CMP	R0, #7
+	BNE	40$
+	CALL	65$
+	TSTB	R0		; match length
+	BEQ	99$
+40$:	MOV	R2, R3
+	SUB	R4, R3
+	MOVB	(R3)+, (R2)+
+	INC	R0
+1$:	MOVB	(R3)+, (R2)+
+	SOB	R0, 1$
+	BR	10$
+45$:	CLR	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+	BR	30$
+50$:	CALL	60$ 		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	SWAB	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ADD	#513., R0
+	BR	30$
+55$:	ROLB	R3
+	BCS	35$
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BR	30$
+60$:	COM	R5
+	BMI	2$
+	MOV	R5, R0
+	CLR	R5
+	BR	3$
+2$:	call	GetB12		; +
+	bicb	R1, R5		; + bicb (R1)+, R5
+	MOV	R5, R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+3$:	BIC	#177760, R0	; leave 4 low bits
+	RETURN
+65$:	MOV	R0, -(SP)	; save original value
+	CALL	60$ 		; get nibble in R0
+	BNE	75$
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BNE	70$
+	; unnecessary for short files
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB12		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	inc	SP		; skip saved R0
+	inc	SP
+	return
+70$:	ADD	#15., R0
+75$:	DEC	R0
+	ADD	(SP)+, R0	; add original value
+99$:	return
+
+	.word	1,2,3,4,5,6,7,0
+CPURE1:
+
+; ////////////////////////////////////////////////////////////////////////////
+; // READ FILE
+; ////////////////////////////////////////////////////////////////////////////
+
+READFL:	mov	#MSG001, MSGADR		; possible error: device error
+	.fetch	#BUF001, #DKN001	; test device
+	bcc	10$
+	return
+10$:	mov	#MSG002, MSGADR		; possible error: channel is active
+	.looku	#AREA01, #7, #DKN001	; test file, return R0-file size in blocks
+	bcc	20$
+	tstb	@#52			; check what error
+	beq	12$			; it's channel is active?
+	mov	#MSG003, MSGADR		; file not found
+12$:	sec
+	return
+20$:	; reading prepare
+	mov	R0, MAXBLK		; file size
+	clr	CURBLK			; block to read
+	mov	#MSG005, MSGADR		; possible error: file read error
+	mov	#176640, R4
+	mov	#176642, R5
+40$:	; reading cycle
+	.readw	#AREA01, #7, #BUF002, #256., CURBLK
+	bcs	90$			; C=1 is error
+	tst	R0			; R0=readed words count
+	beq	50$			; nothing readed? (eof?)
+	; readed, data in BUF002
+	inc	CURBLK
+	mov	#BUF002, R0
+	mov	FILNUM, R2
+	asl	R2	
+	call	@WRITAB(R2)		; call per-file write proc
+	cmp	CURBLK, MAXBLK
+	blt	40$
+	; eof
+50$:	.close	#7
+	clc				; set no error
+	return
+90$:	; read error
+	tstb	@#52			; error word addr
+	beq	50$			; no error - it's what? eof again?
+	.close	#7
+	sec
+	return
+
+WRITAB:	.word	WRICPU, WRICPU, WRIPPU, WRIPPU
+
+; write block BUF002 to planes-1,2
+WRICPU:	mov	ADDR12, (R4)
+	mov	#256., R3
+10$:	mov	(R0)+, (R5)
+	inc	(R4)
+	sob	R3, 10$
+	add	#256., ADDR12
+	return
+
+; write block BUF002 to plane-0
+WRIPPU:	tst	PPCOMM			; maybe it's busy
+	bne	.-4
+	mov	#10, PPCOMM
+	tst	PPCOMM			; wait again
+	bne	.-4	
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // CPU -> PPU exchange	
+; //////////////////////////////////////////////////////////////////////////////
+
+; PPU message
+;
+PPMSG:	.WORD	PPARR	; address of beginning of array
+        .WORD	177777	; end of transmission
+
+; PPU data exchange array
+;
+PPARR:	.BYTE	0	; return value (0 - OK)
+PPCMD:	.BYTE	0	; command
+	.WORD	32	; device type (32 - PPU mem)
+PPAPP:	.WORD	0	; address for PPU
+PPACP:	.WORD	0	; address for CPU
+PPLEN:	.WORD	0	; length in words
+
+; send command to PPU with exch array
+PPSEN:	mov	R0, -(SP)
+	mov	R1, -(SP)
+	mov	#PPMSG, R0	; array address
+	mov	#5, R1		; bytes to send+1 (sending from @#PP_MSG)
+	br	1$
+2$:	movb	(R0)+, @#176676
+1$:	tstb	@#176674	; test if we are ready to send
+	bpl	1$		; cycle if >= 0 (not set last bit in byte)
+	sob	R1, 2$
+	mov	(SP)+, R1
+	mov	(SP)+, R0
+	return
+
+; send and start PPU code
+; R4 - start addr in CPU
+; R5 - length / 2
+PPRUN:	movb	#1, PPCMD	; 1 - allocate memory
+	mov	R5, PPLEN
+	call	PPSEN
+	tstb	PPARR		; test if allocate success
+	beq	1$		; 0 - OK
+	.print	#MSG010
+	.exit			; fatal error - out of memory in PPU
+1$:	movb	#20, PPCMD	; 20 - write to PPU mem
+	mov	R5, PPLEN
+	mov 	R4, PPACP
+	call	PPSEN
+	movb	#30, PPCMD	; 30 - run
+	call	PPSEN
+	return
+
+; release PPU memory in case of something..
+PPRELE:	movb	#2, PPCMD	; 2 - release memory
+	call	PPSEN
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////	
+; // PPU first phase 
+; //////////////////////////////////////////////////////////////////////////////
+
+PPUSTA:	mov	PC, R0
+	add	#INTER1-., R0		; R0 - 'empty' interrupt addr
+	mov	@#300, BKW300		; replace keyboard interrupt
+	mov	R0, @#300
+	; clear planes
+	call	PPCLRV
+	; construct our own lines table	
+	mov	PC, R0
+	add	#PPLIN1-., R0
+	add	#10, R0			; align addr with 8. bytes
+	bic	#7, R0
+	mov	R0, R2			; save addr and use later
+	; 1st element - set palette (YRGB YRGB YRGB YRGB)
+	mov	#^B1101110010011000, (R0)+
+	mov	#^B1111111010111010, (R0)+
+	clr	(R0)+			; vaddr is not used here
+	mov	R0, (R0)		; next element addr
+	add	#2, (R0)
+	bis	#2, (R0)+		; #2 = 010 - next element is scale&cursor
+	; 2nd line - set scale, lumi and cursor
+	mov	#^B0000000000010000, (R0)+ ; no cursor
+	mov	#^B0000000000010111, (R0)+ ; 320x288, max luminance (..00111-640, ..10111 - 320)
+	clr	(R0)+			; vaddr is not used here
+	mov	R0, (R0)
+	add	#2, (R0)+		; next element is 2-words
+	; 16 not used lines
+	mov	#16., R3
+10$:	clr	(R0)+
+	mov	R0, (R0)
+	add	#2, (R0)+
+	sob	R3, 10$
+	; next 288 'main' lines from top
+	; set them to empty vline addr
+	;mov	#175020, R1		; 200000 - 19.*80.
+	mov	#100000, R1
+	mov	#288., R3
+20$:	mov	R1, (R0)+
+	mov	R0, (R0)
+	add	#2, (R0)+
+	add	#80., R1		; uncomment for debug and use "mov #100000, R1" above
+	sob	R3, 20$
+	; set 18 lines at center for 'loading'
+;	sub	#154.*4., R0		; go into ~center of table
+;	mov	#175140, R1		; last 18 lines of vaddr
+;	mov	#18., R3		; are used for loading progress
+;30$:	mov	R1, (R0)+		; set new addrs
+;	inc	R0			; don't touch chain
+;	inc	R0
+;	add	#80., R1
+;	sob	R3, 30$
+	; set new lines table
+	mov	@#270, BKW270
+	mov	@#272, BKW272
+	clr	@#270
+	bis	#6, R2			; first line is palette 
+	mov	R2, @#272		; saved addr
+	; queue process
+	mov	PC, R0			; get proc addr
+	add	#PPPGM1-., R0		;
+	mov	R0, ADPGM1		; save for later use
+	mov	R0, @#7124		; 7104.. (24(8) bytes) - processes addrs
+	mov	#1, @#7100		; 7060.. (24(8) bytes) - processes status, 1-run
+	; clear current command (phase 1 ready)
+	mov	#PPCOMM/2, @#177010
+	clr	@#177014
+	return
+
+; clear vram
+PPCLRV:	mov	#177010, R4
+	mov	#177012, R2
+	mov	#177014, R5
+	mov	#100000, R3
+	mov	R3, (R4)
+30$:	clr	(R2)
+	clr	(R5)
+	inc	(R4)
+	sob	R3, 30$
+	return
+
+; 'empty' interrupt
+INTER1:	rti
+
+; 'backup' values
+BKW270:	.WORD	0
+BKW272:	.WORD	0
+BKW300:	.WORD	0
+
+; lines table data
+PPLIN1:	.BLKW	1200			; need 1150 (616.) words, but for .even 10 and whatever
+
+; 'loading'
+PPSPR1:	.BYTE	^B01100001, ^B11001100, ^B00101001, ^B00011001
+	.BYTE	^B10010001, ^B01010010, ^B00101010, ^B00100101
+	.BYTE	^B10010001, ^B01010010, ^B01101010, ^B00000101
+	.BYTE	^B10010001, ^B01011110, ^B10101010, ^B00110101
+	.BYTE	^B10010001, ^B01010010, ^B00101010, ^B00100101
+	.BYTE	^B01101111, ^B11010010, ^B00101001, ^B00011001
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU Process
+; //////////////////////////////////////////////////////////////////////////////
+
+ADPGM1:	.WORD	0			; address of process
+
+PPPGM1:	mov	R0, -(SP)		; need to save R0 for PPU process
+	mov	#177010, R4
+	mov	#177014, R5
+	mov	#PPCOMM/2, (R4)		; control word addr
+	mov	(R5), R0
+	bpl	02$			; need abort?
+	; abort PPU process
+	call	PPCLRV			; clear vram
+	mov	BKW270, @#270		; restore lines table addr
+	mov	BKW272, @#272
+	mov	BKW300, @#300		; restore kbd interrupt
+	clr	@#7100			; do not execute process again
+	mov	#PPCOMM/2, (R4)		; control word addr
+	clr	(R5)			; command is executed
+	mov	(SP)+, R0		; restore R0
+	jmp	@#174170		; jump to process dispatcher
+02$:	; second phase?
+	cmp	R0, #2
+	beq	PPUST2
+	; copy memory to plane-0
+	cmp	R0, #10
+	beq	PPPG10
+PPPG00:	; return to dispatcher
+	mov	ADPGM1, @#7124		; re-queue process
+	mov	#1, @#7100		; set for execution
+	mov	(SP)+, R0		; restore R0 (needed for dispatcher)
+	jmp	@#174170		; jump to process dispatcher
+
+; copy to plane 0 command
+PPPG10:	mov	#BUF002/2, R0		; source addr in CPU
+	mov	#256., R3
+	mov 	#ADDR00/2, (R4)		; get desc vaddr of plane-0
+	mov	(R5), R2		; R2=vaddr of plane-0
+30$:	mov	R0, (R4)		; source CPU addr/2
+	mov	(R5), R1		; source word from CPU
+	mov	R2, (R4)		; dest vaddr
+	movb	R1, @#177012		; put 1st byte
+	swab	R1			; get 2nd byte
+	inc	(R4)			; advance vaddr
+	movb	R1, @#177012		; put 2nd byte
+	inc	R0
+	inc	R2
+	inc	R2
+	sob	R3, 30$
+	mov	#ADDR00/2, (R4)		; update desc vaddr variable in CPU
+	mov	R2, (R5)
+	; command is executed
+	mov	#PPCOMM/2, (R4)
+	clr	(R5)
+	; jump to return to dispatcher
+	br	PPPG00
+
+; //////////////////////////////////////////////////////////////////////////////	
+; // PPU second phase prepare
+; //////////////////////////////////////////////////////////////////////////////
+
+PPUST2:	; set PSW (HP**TNZVC) = 110000000 (HP=11, disable interrupts, halt mode)
+	mtps	#600
+	; 11 110 001 (all RAM banks of plane 0)
+        ; WARNING !!! We can't read (and bit/tst so on..) from there, but CAN write
+	; to get ROM banks back - mov #1, @#177054
+	mov	#361, @#177054
+
+	; relocate vram 0 part (that readed from *V00.DAT file) to the top of vram
+	clr	R2			; R2 = destination index + 1
+	mov	#ENVR00/2, (R4)
+	mov	(R5), R1		; R1 = source index + 1
+	mov	R1, R3
+	mov	#STVR00/2, (R4)
+	sub	(R5), R3		; R3 = length in vram indexes
+	mov	#177012, R5		; (!) vram data reg changed (!) it was 177014 before
+10$:	dec	R1
+	dec	R2
+	mov	R1, (R4)
+	mov	(R5), R0
+	clr	(R5)
+	mov	R2, (R4)
+	mov	R0, (R5)
+	sob	R3, 10$
+	mov	R2, STVU00		; set *V00 starting addr in relocatable variable
+
+	; relocate decompression code to TOPPPU addr and run
+	mov	#TOPPPU, SP		; move to -> R5
+	mov	SP, R5
+	mov	PC, R4
+	add	#PPURE0-., R4		; start -> R4
+	mov	#PPURE1-PPURE0/2, R3	; words count
+	mov	(R4)+, (R5)+
+	sob	R3, .-2	
+
+	; signal to CPU that phase 2 is going
+	mov	#PPCOMM/2, @#177010
+	clr	@#177014
+
+	jmp	(SP)
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Phase 2 - Decompressing routines 
+; //////////////////////////////////////////////////////////////////////////////
+
+; .=TOPPPU, SP must be at this addr
+PPURE0:
+	; clear PPU RAM up to SP
+	clr	R0
+	mov	SP, R3
+	clc
+	ror	R3
+	clr	(R0)+
+	sob	R3, .-2
+	; prepare to decompress first part, PPU RAM
+	mov	#100000, GetA00		; source address-1
+	clr	R2			; destination address
+	call	Unpa01			; decompress first part to PPU RAM
+	; prepare to decompress second part, VRAM -> VRAM
+	mov	STVU00, GetA00
+	mov	#100000, PutA00
+	call	Unpa02			; decompress second part VRAM top -> VRAM at 0
+	; move DESR00 block in vram from 100000 to V00ADR+100000
+	mov	#177010, R4
+	mov	#177012, R5
+	mov	#177777, R2
+	mov	R2, R1
+	sub	#V00ADR, R1
+	mov	#100000, R3
+	sub	#V00ADR, R3
+10$:	mov	R1, (R4)
+	movb	(R5), R0
+	mov	R2, (R4)
+	movb	R0, (R5)
+	dec	R2
+	dec	R1
+	sob	R3, 10$
+	; all is set - jump to main PPU code
+	jmp	@#1000			; jump to 'ppu phase 3 init'
+
+STVU00:	.word	0
+
+; lzsa3 decompressing routines by manwe & ivanq
+; https://github.com/imachug/lzsa3
+
+; get byte -> R1 from vram and advance vram # var
+GetB00:	mov	#100000, @#177010
+GetA00  =: GetB00 + 2
+	inc	GetA00
+	movb	@#177012, R1
+	return
+
+; put R1 -> byte to vram and advance vram # var
+PutB00:	mov	#100000, @#177010
+PutA00 =: PutB00 + 2
+	inc	PutA00
+	movb	R1, @#177012
+	return
+
+; VRAM -> VRAM
+Unpa02:	CLR	R5		; no nibbles sign
+10$:	call	GetB00		; +
+	movb	R1, R3		; + movb (R1)+, R3
+	MOV	R3, R0
+	BIC	#177774, R0	; get 2 bits
+	BEQ	25$
+	CMP	R0, #3		; literals length
+	BNE	20$
+	CALL	65$
+20$:	call	GetB00		; +
+	call	PutB00		; + movb (R1)+, (R2)+
+	SOB	R0, 20$
+25$:	MOV	R3, -(SP)
+	ROLB	R3		; get 2 bits
+	ROL	R0
+	ROLB	R3
+	ROL	R0
+	ASL	R0
+	ADD	R0, PC		; run subroutine
+	BR	55$
+	BR	45$
+	BR	50$
+	CALL	60$		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+30$:	MOV	R0, R4		; save offset for future
+35$:	MOV	(SP)+, R0
+	ASR	R0
+	ASR	R0
+	BIC	#177770, R0	; get 3 bits
+	CMP	R0, #7
+	BNE	40$
+	CALL	65$
+	TSTB	R0		; match length
+	BEQ	99$
+40$:	; copy (dest-r4) -> (dest)
+	mov	PutA00, R1
+	sub	R4, R1
+	mov	R1, @#177010
+	movb	@#177012, R1
+	call	PutB00
+	inc	R0
+1$:	mov	PutA00, R1
+	sub	R4, R1
+	mov	R1, @#177010
+	movb	@#177012, R1
+	call	PutB00
+	sob	R0, 1$
+	BR	10$
+45$:	CLR	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+	BR	30$
+50$:	CALL	60$ 		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ADD	#513., R0
+	BR	30$
+55$:	ROLB	R3
+	BCS	35$
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BR	30$
+60$:	COM	R5
+	BMI	2$
+	MOV	R5, R0
+	CLR	R5
+	BR	3$
+2$:	call	GetB00		; +
+	bicb	R1, R5		; + bicb (R1)+, R5
+	MOV	R5, R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+3$:	BIC	#177760, R0	; leave 4 low bits
+	RETURN
+65$:	MOV	R0, -(SP)	; save original value
+	CALL	60$ 		; get nibble in R0
+	BNE	75$
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BNE	70$
+	; unnecessary for short files
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	inc	SP		; skip saved R0
+	inc	SP
+	return
+70$:	ADD	#15., R0
+75$:	DEC	R0
+	ADD	(SP)+, R0	; add original value
+99$:	return
+
+; VRAM -> RAM
+Unpa01:	CLR	R5		; no nibbles sign
+10$:	call	GetB00		; +
+	movb	R1, R3		; + movb (R1)+, R3
+	MOV	R3, R0
+	BIC	#177774, R0	; get 2 bits
+	BEQ	25$
+	CMP	R0, #3		; literals length
+	BNE	20$
+	CALL	65$
+20$:	call	GetB00		;+
+	movb	R1, (R2)+	;+ movb (R1)+, (R2)+
+	SOB	R0, 20$
+25$:	MOV	R3, -(SP)
+	ROLB	R3		; get 2 bits
+	ROL	R0
+	ROLB	R3
+	ROL	R0
+	ASL	R0
+	ADD	R0, PC		; run subroutine
+	BR	55$
+	BR	45$
+	BR	50$
+	CALL	60$		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+30$:	MOV	R0, R4		; save offset for future
+35$:	MOV	(SP)+, R0
+	ASR	R0
+	ASR	R0
+	BIC	#177770, R0	; get 3 bits
+	CMP	R0, #7
+	BNE	40$
+	CALL	65$
+	TSTB	R0		; match length
+	BEQ	99$
+40$:	MOV	R2, R3
+	SUB	R4, R3
+	MOVB	(R3)+, (R2)+
+	INC	R0
+1$:	MOVB	(R3)+, (R2)+
+	SOB	R0, 1$
+	BR	10$
+45$:	CLR	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+	BR	30$
+50$:	CALL	60$ 		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ADD	#513., R0
+	BR	30$
+55$:	ROLB	R3
+	BCS	35$
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BR	30$
+60$:	COM	R5
+	BMI	2$
+	MOV	R5, R0
+	CLR	R5
+	BR	3$
+2$:	call	GetB00		; +
+	bicb	R1, R5		; + bicb (R1)+, R5
+	MOV	R5, R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+3$:	BIC	#177760, R0	; leave 4 low bits
+	RETURN
+65$:	MOV	R0, -(SP)	; save original value
+	CALL	60$ 		; get nibble in R0
+	BNE	75$
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BNE	70$
+	; unnecessary for short files
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	inc	SP		; skip saved R0
+	inc	SP
+	return
+70$:	ADD	#15., R0
+75$:	DEC	R0
+	ADD	(SP)+, R0	; add original value
+99$:	return
+
+PPURE1:
+
+; //////////////////////////////////////////////////////////////////////////////
+; // END PPU CODE 
+; //////////////////////////////////////////////////////////////////////////////
+PPUEND:
+
+	.END	START

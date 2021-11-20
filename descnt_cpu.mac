@@ -1,0 +1,1588 @@
+	.title	DESCPU
+	.enabl	LC,AMA	; local labels, absolute addr mode (important)
+	.list	MEB	; enable macro-extensions binary listing
+	.asect
+.=0	; from address 0 (!)
+	
+; custom linker, use macroses with caution
+; .ENABL AMA is important for absolute addrs with macro11.exe (!)
+; 
+; preprocessor:
+; @include filename.ext - includes file
+; .ppexe VAR - macro
+;	mov	VAR, R5
+;	call	PPUExecute
+
+@include inc_common.mac
+@include inc_cpu_header.mac
+
+	mtps	#200			; PSW - HP**TNZVC (010000000)
+	mov	#1000, SP		; stack is 500..776(8)
+
+	; disable serial adapters interrupts
+	;bic	#100, @#176560		; network, input
+	;bic	#100, @#176564		; network, output
+	bic	#100, @#176570		; rs-232, input
+	bic	#100, @#176574		; rs-232, output
+	; trap register, disable interrupts
+	; emustudio is using it - so it's commented here
+	;mov	#0, @#176644
+
+	; clear CPU upper RAM
+	mov	#END, R0
+	mov	#<160000-END/2>, R3
+	clr	(R0)+
+	sob	R3, .-2
+
+	; ask for 'ppu phase 3'
+	mov	#30, PPUState
+        ; wait for ackn of phase 3
+	cmp	#03, PPUState
+	bne	.-6
+
+	mov	#VSync, @#100		; vsync interrupt
+	mtps	#0
+
+; //////////////////////////////////////////////////////////////////////////////
+; // MAIN
+; //////////////////////////////////////////////////////////////////////////////
+
+; main CPU cycle
+MainCycle:
+	call	VSyncWait		; vsync wait cycle
+	call	CheckStop		; STOP key - reset game
+	call	CheckColors		; K1 key - RGB/GRB
+	call	CheckDebug		; K2 key - debug on|off
+	; key UST - pause
+	tst	KeyUst
+	beq	10$
+	clr	KeyUst
+	com	Pause
+10$:	tst	Pause
+	bne	MainCycle
+	; run procedures
+	mov	CurrentMode, R0
+	asl	R0
+	call	@MainCycleTable(R0)
+	; debug output
+	call	DebugInfo	
+	jmp	MainCycle
+
+MainCycleTable:	
+	.WORD	MainReset, MainMenu, MainPrepare, MainScreenUp, MainGame
+
+
+; Menu Tiles - X, Y, Id1, Id2, Id3 ... 255. then again till Id=0
+MenuTbl00:	.byte	00., 08., 09., 08., 10., 08., 00.
+		.byte	01., 02., 03., 04., 05., 06., 07.
+		.byte	00., 12., 11., 12., 12., 11., 00.
+; Menu Texts - X, Y, Id, 1|2x ...
+MenuTbl10:	.byte	013., 110., 00.,	013., 120., 01.,	013., 130., 02.
+		.byte	013., 145., 03.,	013., 155., 04.,	013., 165., 05.
+		.byte	014., 185., 06.,	0
+		.even
+
+; called after game reset - reset vars and draw main menu
+MainReset:
+	; variables from reset
+	mov	#2., VSyncX		; game speed - #2 of 50Hz sync interrupt (25fps)
+	; screen prepare (clear)
+	mov	#VADDR, R0		; reset lines table addrs (if stopped in a middle of changing)
+	.ppexe	#CmdLinesFromR0	
+	clr	R0
+	.ppexe	#CmdFillScreen		; clear screen plane-0
+	call	ClearScreen		; clear screen planes-1,2
+	; TODO: unpack global level
+	call	InitTilesWeight
+	; put logo to buffer
+	call	ClearVBuffer
+	call	ClearLevel
+	mov	#FieldDX*2+8.+Level, R5
+	mov	#MenuTbl00, R0
+	mov	#3, R3
+10$:	mov	#7, R2
+20$:	movb	(R0)+, (R5)+
+	inc	R5
+	sob	R2, 20$
+	add	#FieldDX-7*2, R5
+	sob	R3, 10$
+	; prepare menu character walking
+	mov	#64., PlayerX
+	mov	#16., PlayerY
+	clr	PlayerDir
+	clr	PlayerAni
+	mov	#5., PlayerSpr
+	call	RedrawFull
+	; controls text
+	mov	#MenuTbl10, varAddr
+	call	PrintTextLines
+	; start some music
+	mov	#1., R0			; music ID
+	.ppexe	#CmdMusicPlay		; start music command
+	; debug info
+	mov	#160000-END, R0		; free CPU RAM
+	mov	#400000-ENDVram12, R4	; free VRAM12
+	.ppexe	#CmdDebugString
+	; go main menu
+	inc	CurrentMode		; -> 1 (MainMenu)
+	return
+
+
+; main menu processing
+MainMenu:
+	; --- player walking ---
+	mov	#playerObject, R0
+	call	BufferObject
+	call	DrawChanged
+	; character animation
+	bit	#^B11, FrameCount	; every 4th frame
+	bne	30$
+	inc	PlayerAni
+	bic	#^B1111111111111100, PlayerAni
+	tst	PlayerDir		; walking right?
+	bne	22$			; nope - go 22
+	mov	#5., PlayerSpr		; base walk right sprite
+	add	#2., PlayerX
+	cmp	PlayerX, #158.		; at the right edge?
+	blt	24$
+	mov	#158., PlayerX
+	inc	PlayerDir		; walk left now
+	br	24$
+22$:	mov	#2., PlayerSpr
+	sub	#2., PlayerX
+	cmp	PlayerX, #64.
+	bgt	24$
+	mov	#64., PlayerX
+	clr	PlayerDir
+24$:	mov	PlayerAni, R0
+	movb	SPPAniTable(R0), R0
+	add	R0, PlayerSpr
+30$:	; ----------------------
+	; test for start key
+	tst	KeySpace
+	beq	99$
+	; go game prepare
+	clr	KeySpace
+	inc	CurrentMode		; ->2 (MainPrepare)
+99$:	return
+
+
+; game prepare
+MainPrepare:
+	; prepare screen 
+	.ppexe	#CmdHideScreen		; hide anything going on screen
+	mov	#8., R0
+	mov	#14., R1
+	mov	#288., R2
+	.ppexe	#CmdPrintStr
+	mov	#177777, R0
+	.ppexe	#CmdFillScreen		; fill screen plane 0
+	call	ClearScreen		; clear screen planes 1,2
+	call	ScreenBackground	; fill with ////
+	call	DrawFieldBorder		; prepare game borders & item boxes
+	call	ClearItems
+	call	UpdateItems		; draw player items
+
+	clr	glevelX			; glevelX = 377 - not initialized
+	dec	glevelX			; glevelY = 377
+	movb	#1, glevelNewX		; first level coords
+	clrb	glevelNewY		;
+	call	InitLevelField		; init level
+
+	; player vars prepare
+	mov	#playerObject, R0
+	mov	#playerObjectEnd-playerObject/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+	mov	#PLSWALKING, playerState
+	mov	#122., playerX
+	mov	#048., playerY
+	clr	playerDir
+	clr	playerAni
+	mov	#2., playerSpr
+	clr	playerItemNew
+	call	SelectNewItem
+
+	; go show screen
+	call	RedrawFull
+	clr	varY			; for screen fade in
+	mov	#1, varDY		;
+	inc	CurrentMode		; next mode -> fade in screen
+	mov	#1., VSyncX		; speed up to 50fps
+
+	return
+
+
+; make screen appear
+MainScreenUp:
+	mov	varDY, R0
+	asr	R0
+	asr	R0
+	add	R0, varY
+	cmp	varDY, #24.
+	bhis	2$
+	inc	varDY
+2$:	mov	varY, R0
+	.ppexe	#CmdFadeInScreen
+	cmp	varY, #144.
+	blo	10$
+	mov	#2., VSyncX		; slow down to 25fps
+	inc	CurrentMode		; next mode -> game main
+10$:	return
+	
+	
+; game processing
+MainGame:
+	call	BufAllSprites
+	call	DrawChanged
+	; processing
+	call	ProcItemKeys
+	call	ProcessPlayer
+	call	Acting
+	call	ProcessObjects
+	call	ProcessPlayerOut
+	return
+
+
+; put all to buffer
+BufAllSprites:
+	call	BufferObjects
+	; buffer player using item (acting)
+	mov	plActing, R0
+	asl	R0
+	call	@BufActTable(R0)
+	; buffer player 
+	mov	#playerObject, R0
+	call	BufferObject
+	return
+
+
+; buffer currently using item
+BufActTable:
+	.WORD	BufActNone, BufActNone, BufActSpade
+BufActNone:
+	return
+BufActSpade:
+	mov	plActingArg1, R0	; direction (0->,1,2,3 clockwise)
+	clr	drawSpr
+	bisb	spadeSprites(R0), drawSpr
+	mov	plActingArg2, R3	; animation # (0,1,2,3)
+	asl	R0			; dir*4 (bytes)
+	asl	R0
+	add	R3, R0
+	movb	spadeActDX(R0), R1
+	movb	spadeActDY(R0), R2
+	mov	playerX, drawX
+	mov	playerY, drawY
+	add	R1, drawX
+	add	R2, drawY
+	mov	#drawObject, R0
+	call	BufferObject
+	return
+spadeSprites:	.BYTE	20., 21., 22., 23.
+spadeActDX:	.BYTE	3,5,3,0, 0,0,0,0, -3,-5,-3,0, 0,0,0,0
+spadeActDY:	.BYTE	1,1,1,0, 6,8.,6,0, 1,1,1,0, -7,-9.,-7,0
+
+
+; mark level bits as 'drawed' and draw object sprite in buffer
+; R0-object addr [TYPE|SUBTYPE, SprID, X, Y]
+BufferObject:
+	mov	4(R0), R1		; X
+	bmi	99$			; <0 - no object
+	mov	6(R0), R2		; Y
+	mov	R1, R3			; save them for later use
+	mov	R2, R4
+	asr	R3			; convert X,Y to level offset
+	asr	R3
+	asr	R3
+	asr	R3			; levelX
+	mov	R3, R5
+	bic	#^B0000000000001111, R4	; levelY*16
+	add	R4, R5			; level offset
+	asl	R5
+	add	#Level, R5		; level addr -> R5
+	bis	#100000, (R5)		; set bit 'was used in drawing' on tile
+	mov	#2, R3
+	bit	#^B1111, R1		; need to mark X+1?
+	beq	10$
+	bis	#100000, 2(R5)
+	dec 	R3
+10$:	bit	#^B1111, R2		; need to mark Y+1?
+	beq	20$
+	bis	#100000, 32.(R5)
+	dec	R3			; need to mark X+1,Y+1?
+	bne	20$
+	bis	#100000, 34.(R5)
+20$:	mov	2(R0), R0		; sprite ID, X,Y already in R1,R2
+	call	BufSprite
+99$:	return
+
+
+; draw changed parts of level from buffer to screen and redraw bgr to buffer
+DrawChanged:
+	mov	#LevelEnd, R5		; last level unit addr + 2
+	mov	#CLV_LOCAL_DY, varY	; traverse backwards
+10$:	mov	#CLV_LOCAL_DX, varX	;
+20$:	mov	-(R5), R0		; decrease addr and get level unit
+	bit	#^B0001000000000000, R0	; is it animated?
+	beq	30$
+	; animated tile - add animation
+	mov	FrameCount, R1
+	bit	#3, R1			; every 4th frame
+	bne	30$
+	asr	R1
+	asr	R1			; animation number
+	add	R5, R1			; add X for some difference in animations
+	bic	#^B1111111111111100, R1	; only 2 bits for animations
+	bic	#3, R0			; reset animated tile #
+	bis	R1, R0			; add animation
+	bis	#100000, R0		; TODO: this is not optimal (!!!)
+30$:	; changed buffer
+	bit	#140000, R0		; check current+previous bits
+	beq	50$
+	; draw buffer to screen
+	mov	varX, R1
+	mov	varY, R2
+	mov	R5, -(SP)
+	mov	R0, -(SP)
+	call	Buf2Scr16
+	mov	(SP)+, R0
+	mov	(SP)+, R5
+	; if current - restore buffer
+	bit	#100000, R0
+	beq	40$
+	; clear current and set previous bits, and restore
+	bic	#100000, R0
+	bis	#040000, R0
+	mov	varX, R1
+	mov	varY, R2
+	mov	R5, -(SP)
+	mov	R0, -(SP)
+	call	BufTile
+	mov	(SP)+, R0
+	mov	(SP)+, R5
+	br	50$
+40$:	; clear 'previous' bit
+	bic	#040000, R0
+50$:	mov	R0, (R5)
+	dec	varX
+	bge	20$
+	dec	varY
+	bge	10$
+	return
+
+
+; buffer all tiles
+BufAllTiles:
+	mov	#LevelEnd, R5
+	mov	#FieldDY, R2
+10$:	mov	#FieldDX, R1
+20$:	mov	-(R5), R0
+	bic	#^B1111111100000000, R0
+	bis	#040000, (R5)		; mark tile as 'recently changed' also
+	mov	R1, -(SP)
+	mov	R2, -(SP)
+	mov	R5, -(SP)
+	dec	R1
+	dec	R2
+	call	BufTile
+	mov	(SP)+, R5
+	mov	(SP)+, R2
+	mov	(SP)+, R1
+	sob	R1, 20$
+	sob	R2, 10$
+	return
+
+
+; invalidate all tiles and redraw all 
+RedrawFull:
+	call	BufAllTiles
+	call	BufAllSprites
+	call	DrawChanged
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Level routines 
+; //////////////////////////////////////////////////////////////////////////////
+
+; clear level
+ClearLevel:
+	mov	#Level, R0
+	mov	#LevelEnd-Level/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+	mov	#LevelObj, R0
+	mov	#LevelObjEnd-LevelObj/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+	return
+
+
+; copy level data global -> local 
+CopyGlobalLocal:
+	call	SetVreg			; R4=176640, R5=176642
+	; first - copy level tiles
+	call	gCoordsLVram		; set source in (R4)
+	mov	#Level, R2		; set dest in R2
+	; copy FieldDX * FieldDY words
+	mov	#FieldDY, R3
+10$:	mov	#FieldDX, R1
+20$:	mov	(R5), (R2)+
+	inc	(R4)
+	sob	R1, 20$
+	add	#CGL_DX-FieldDX, (R4)
+	sob	R3, 10$
+	; copy level objects
+	call	gCoords2R0
+	mov	#CLV_MAX_OBJ * COBJ_LEN, R3
+	mul	R3, R0
+	add	#GlobalObj-200000, R1
+	sec
+	ror	R1
+	mov	R1, (R4)		; R1 = vram # for objects
+	mov	#LevelObj, R2		; dest addr
+	mov	#CLV_MAX_OBJ, R3
+30$:	mov	(R5), (R2)+		; obj type & subtype
+	inc	(R4)
+	mov	(R5), R0		; arg0 & coords
+	inc	(R4)
+	clr	(R2)			; put arg 0
+	movb	R0, (R2)+		;
+	inc	R2			;
+	clrb	R0			; get coords
+	swab	R0			; R0 = coords
+	ash	#4, R0			; convert X to pixels
+	movb	R0, (R2)+		; put X
+	inc	R2
+	clrb	R0
+	swab	R0			; R0=Y
+	ash	#4, R0			; convert Y to pixels
+	mov	R0, (R2)+		; put Y (high byte already 0)
+	sob	R3, 30$	
+	return
+
+
+; copy level data local -> global
+CopyLocalGlobal:
+	call	SetVreg			; R4=176640, R5=176642
+	; copy level tiles
+	call	gCoordsLVram		; set dest in (R4)
+	mov	#Level, R2		; set source in R2
+	; copy FieldDX * FieldDY words
+	mov	#FieldDY, R3
+10$:	mov	#FieldDX, R1
+20$:	mov	(R2)+, (R5)
+	inc	(R4)
+	sob	R1, 20$
+	add	#CGL_DX-FieldDX, (R4)
+	sob	R3, 10$
+	; copy level objects
+	call	gCoords2R0
+	mov	#CLV_MAX_OBJ * COBJ_LEN, R3
+	mul	R3, R0
+	add	#GlobalObj-200000, R1
+	sec
+	ror	R1
+	mov	R1, (R4)
+	mov	#LevelObj, R2
+	mov	#CLV_MAX_OBJ, R3
+30$:	mov	(R2)+, (R5)		; object type & subtype
+	inc	(R4)
+	mov	(R2)+, R0		; arg0 (spr #)
+	mov	(R2)+, R1		; X-pixels
+	ash	#-4, R1			; X/16
+	swab	R1
+	clrb	R1
+	bis	R1, R0			; put X part to R0	
+	mov	(R2)+, R1		; Y-pixels
+	bic	#^B1111111100001111, R1	; align to 16-pix
+	swab	R1	
+	bis	R1, R0			; R0=[coords][arg0]
+	mov	R0, (R5)		; put it to vram
+	inc	(R4)
+	sob	R3, 30$
+	return
+
+
+; global level coords into index -> R0
+gCoords2R0:
+	movb	glevelY, R0
+	asl	R0
+	asl	R0
+	bisb	glevelX, R0
+	return
+
+
+; set vaddr to global level offset
+gCoordsLVram:
+	movb	glevelY, R0
+	mul	#CLV_LOCAL_DY*CGL_DX, R0
+	mov	R1, R2			; R2 = starting glevelY offset (units)
+	movb	glevelX, R0
+	mul	#CLV_LOCAL_DX, R0
+	add	R1, R2
+	asl	R2			; R2 = offset in global level (real)
+	add	#GlobalLevel-200000, R2	; R2 = addr rel to vram12
+	sec	
+	ror	R2			; R2 = vram #
+	mov	R2, (R4)
+	return
+
+
+; update global tiles weights
+InitTilesWeight:
+	call	SetVreg
+	mov	#GlobalLevel-200000, R0
+	sec
+	ror	R0
+	mov	R0, (R4)
+	mov	#CGL_DY*CGL_DX, R3
+10$:	mov	(R5), R0
+	bic	#^B1110111100000000, R0
+	clr	R1
+	bisb	TilesWeight(R0), R1
+	swab	R1
+	bis	R1, R0
+	mov	R0, (R5)
+	inc	(R4)
+	sob	R3, 10$
+	return
+
+
+; create level field
+InitLevelField:
+	tst	glevelX			; was previous level?
+	bmi	10$			; wasn't - skip saving
+	call	CopyLocalGlobal		; or else save it in vram
+10$:	movb	glevelNewX, glevelX
+	movb	glevelNewY, glevelY
+	call	CopyGlobalLocal		; read level from vram
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Player movements 
+; //////////////////////////////////////////////////////////////////////////////
+
+ChkBlocksEmpty:	.BYTE	0
+ChkBlocksClimb:	.BYTE	0
+ChkBlocksStand:	.BYTE	0
+ChkBlocksSolid:	.BYTE	0
+
+;	0 1 2 3 [4 5 6 7 8 9 10 11] 12 13 14 15
+
+; check if player intersects with blocks, R1,R2 - X,Y
+CheckAvail:
+	clr	ChkBlocksEmpty
+	clr	ChkBlocksEmpty+2
+	add	#4., R1			; X+3
+	add	#2., R2			; Y+2
+	call	CheckAvailPoint
+	beq	90$
+	add	#7., R1			; X+10
+	call	CheckAvailPoint
+	beq	90$
+	add	#13., R2		; Y+15
+	call	CheckAvailPoint
+	beq	90$
+	sub	#7., R1
+	call	CheckAvailPoint
+	beq	90$
+	clc
+	return
+90$:	inc	ChkBlocksSolid
+	sec
+	return
+
+; set checked blocks from level point R1,R2 (x,y), return type and flag of passable (Z - not passable)
+; do not modify R1,R2,R5
+; 0 - nothing, 1 - can climb, 2 - can stand, 3 - solid
+CheckAvailPoint:
+	mov	R1, R3
+	mov	R2, R4
+	; coords to level addr
+	bic	#^B1111, R4		; R4 = levelY*16
+	ash	#-4, R3			; R3 = levelX
+	add	R3, R4			; level offset in units
+	asl	R4			; level offset in words
+	mov	Level(R4), R0
+	swab	R0
+	bic	#^B1111111111111100, R0	; 2-bits for tile weight
+	incb	ChkBlocksEmpty(R0)
+	cmp	R0, #3
+	return
+
+
+KeysRightLeft:
+	; check right 
+1$:	tst	KeyRight
+	beq	11$
+	mov	#PLDRIGHT, playerDir
+	inc	playerDX
+	bpl	2$
+	mov	#1, playerDX
+2$:	cmp	playerDX, #2
+	ble	3$
+	mov	#2, playerDX
+3$:	return
+	; check left
+11$:	tst	KeyLeft
+	beq	21$
+	mov	#PLDLEFT, playerDir
+	dec	playerDX
+	bmi	12$
+	mov	#-1, playerDX
+12$:	cmp	playerDX, #-2
+	bge	13$
+	mov	#-2, playerDX
+13$:	return
+	; no right nor left
+21$:	clr	playerDX
+	return
+
+KeysUpDown:
+	; check down
+1$:	tst	KeyDown			; moving down?
+	beq	11$
+	inc	playerDY		; inc down increment
+	bpl	2$			; 
+	mov	#1, playerDY		; if zero or negative - reset to +1
+2$:	cmp	playerDY, #2		; max increment?
+	ble	3$
+	mov	#2, playerDY		; set to max increment +2
+3$:	return
+	; check up
+11$:	tst	KeyUp
+	beq	21$
+	dec	playerDY
+	bmi	12$
+	mov	#-1, playerDY
+12$:	cmp	playerDY, #-2
+	bge	13$
+	mov	#-2, playerDY
+13$:	return
+	; no right nor left
+21$:	clr	playerDY
+	return
+	
+ProcessPlayerDX:
+	tst	playerDX
+	bne	10$
+	return
+10$:	mov	playerX, R1
+	mov	playerY, R2
+	add	playerDX, R1
+	; test for collisions with blocks
+15$:	call	CheckAvail
+	bcs	20$
+	add	playerDX, playerX
+	return
+20$:	tst	playerDX
+	bpl	30$
+	inc	playerDX
+	bne	10$
+	return
+30$:	dec	playerDX
+	bne	10$
+	return
+
+
+ProcessPlayerDY:
+	tst	playerDY
+	bne	10$
+	return
+10$:	mov	playerX, R1
+	mov	playerY, R2
+	add	playerDY, R2
+	call	CheckAvail
+	bcs	20$
+	add	playerDY, playerY
+	return
+20$:	tst	playerDY
+	bpl	30$
+	inc	playerDY
+	bne	10$
+	return
+30$:	dec	playerDY
+	bne	10$
+	return
+
+
+; if nothing under player - he can fall
+TransFalling:
+	mov	playerX, R1
+	mov	playerY, R2
+	add	#16., R2			; Y-coord 1px under feet
+	add	#4, R1				; X+3
+	call	CheckAvailPoint
+	tst	R0				; if any non-solid - can't fall
+	bne	99$
+	add	#7, R1				; X+10
+	call	CheckAvailPoint
+	tst	R0	
+	bne	99$
+	clr	playerDY
+	mov	#PLSFALLING, playerState	; seems we can fall
+	sec
+	return
+99$:	clc
+	return
+
+; test for up key and if can jump
+TransJumping:
+	tst	KeyUp
+	beq	99$
+	mov	#PLSJUMPING, playerState
+	clr	jumpVelocity
+	sec
+	return
+99$:	clc
+	return
+
+; test for up|down keys and if can climb
+TransClimbing:
+	tst	KeyDown				; can climb down if ladder is under player
+	beq	10$				; and nothing blocks
+	clrb	ChkBlocksClimb			; clear climbing blocks count
+	mov	playerX, R1
+	mov	playerY, R2
+	add	#16., R2
+	add	#4, R1
+	call	CheckAvailPoint
+	beq	99$				; if solid obj under the player
+	add	#7, R1
+	call	CheckAvailPoint
+	beq	99$
+	tstb	ChkBlocksClimb			; if was climbing block under
+	beq	99$
+	; seems we can climb down
+	inc	playerY				; immediate climb 1 pixel down
+	clr	playerDY
+	mov	#PLSCLIMBING, playerState
+	sec	
+	return
+10$:	tst	KeyUp				; can climb up if ladder beneath the player
+	beq	99$
+	mov	playerX, R1
+	mov	playerY, R2
+	call	CheckAvail			; full check (all points)
+	tstb	ChkBlocksClimb
+	beq	99$
+	; seems we can climb up
+	clr	playerDY
+	mov	#PLSCLIMBING, playerState
+	sec
+	return
+99$:	clc
+	return
+
+; walking left/right
+; transitions to climbing, jumping, falling
+PlayerWalking:
+	; check transitions - order MATTERS 
+	; e.g. to can jump off the edge from tunnel
+	; jumping must be checked before falling
+	call	TransClimbing
+	bcs	99$
+	call	TransJumping
+	bcs	99$
+	call	TransFalling
+	bcs	99$
+	; set playerDX from keys and process it
+	call	KeysRightLeft
+	call	ProcessPlayerDX
+	; standing sprites
+	mov	#2, playerSpr
+	cmp	playerDir, #PLDRIGHT
+	bne	10$
+	mov	#5, playerSpr
+10$:	; testing for movement
+	tst	playerDX
+	beq	30$
+	mov	PlayerAni, R0
+	movb	SPPAniTable(R0), R0
+	add	R0, PlayerSpr
+	inc	playerAni
+	bic	#^B1111111111111100, playerAni
+	br	99$
+30$:	; standing still - maybe apply 'acting' modification to animation
+	tst	plActing
+	beq	99$
+	dec	playerSpr
+99$:	return
+
+
+JumpFallSprites:
+	mov	#1, playerSpr
+	cmp	playerDir, #PLDRIGHT
+	bne	10$
+	mov	#6, playerSpr
+10$:	return
+
+
+PlayerFallingDY:
+	; first - check vertical moving ranges [1..4]
+	tst	playerDY
+	bgt	10$
+	mov	#1, playerDY
+	return
+10$:	cmp	playerDY, #4
+	ble	12$
+	mov	#4, playerDY
+	; check blocks below player
+12$:	mov	playerX, R1
+	mov	playerY, R2
+	add	playerDY, R2
+	add	#4, R1				; X+4
+	add	#15., R2			; Y+DY+15
+	call	CheckAvailPoint			; check coords, return Z if solid
+	beq	20$				; solid object - unable to move
+	mov	R0, R5				; return value to temporary var
+	add	#7, R1				; X+11
+	call	CheckAvailPoint			; check next point coords
+	beq	20$				; solid object - unable to move	
+	bis	R0, R5				; to check both points
+	beq	30$				; nothing under player - continue to move
+	;TODO: stand block
+	;bit	#1, R5				; can't fall if there is 'stand' block
+	;bne	20$
+	cmp	playerDY, #2			; 'climb' blocks are passable with falling 
+	bgt	30$				; if player is moving faster than 2px speed
+20$:	; unable to move further, decrease speed and try again
+	dec	playerDY
+	bne	10$				; still can try to move?
+	mov	#PLSWALKING, playerState	; unable to move even 1px down
+	return
+30$:	; can move down, modify coords and increase speed
+	add	playerDY, playerY
+	inc	playerDY
+	return
+
+; london bridge is falling down
+; can stop by solid block anywhere or by stand block (varies)
+PlayerFalling:
+	call	TransClimbing			; can change to climbing if ladder is behind
+	bcs	99$
+	call	PlayerFallingDY
+	call	KeysRightLeft
+	call	ProcessPlayerDX
+	call	JumpFallSprites
+99$:	return
+	
+
+PlayerJumpingDY:
+	mov	jumpVelocity, R0
+	inc	jumpVelocity
+	movb	jumpTableDY(R0), R0
+	mov	R0, playerDY
+	beq	90$
+	mov	playerX, R1
+	mov	playerY, R2
+	add	R0, R2
+	call	CheckAvail
+	bcs	90$
+	add	playerDY, playerY
+	return
+90$:	clr	playerDY
+	mov	#PLSFALLING, playerState
+	return
+	
+
+; jumping
+; transitions to climbing, falling
+PlayerJumping:
+	call	TransClimbing			; can change to climbing if ladder is behind
+	bcs	99$
+	call	PlayerJumpingDY
+	call	KeysRightLeft
+	call	ProcessPlayerDX
+	call	JumpFallSprites
+99$:	return
+
+
+; climbing ladders
+; transitions to walking if out of ladder
+PlayerClimbing:
+	; abort climbing?
+	mov	playerX, R1
+	mov	playerY, R2
+	call	CheckAvail
+	tstb	ChkBlocksClimb
+	bne	10$
+	mov	#PLSWALKING, playerState
+	clr	KeyUp				; release UP for not jumping immediately from ladder
+	return
+10$:
+	call	KeysRightLeft
+	call	KeysUpDown
+	call	ProcessPlayerDX
+	call	ProcessPlayerDY
+
+	mov	#8., playerSpr
+	mov	playerDX, R0
+	bis	playerDY, R0
+	bne	30$
+	clr	playerAni
+	br	40$
+30$:	mov	playerAni, R0
+	movb	SPPAniTable(R0), R0
+	add	R0, playerSpr
+	tst	playerDY			; both animations are look same
+	bpl	32$				; so do we need this?
+	inc	playerAni
+	inc	playerAni
+32$:	dec	playerAni
+	bic	#^B1111111111111100, playerAni	
+40$:
+	return
+	
+	
+PlayerDying:
+	return
+	
+	
+PStateTable:
+	.WORD	PlayerWalking, PlayerFalling, PlayerJumping, PlayerClimbing, PlayerDying
+	
+
+ProcessPlayer:
+	mov	playerState, R0
+	asl	R0
+	call	@PStateTable(R0)
+	return
+
+
+; check for out-of-screen and change level
+ProcessPlayerOut:
+	tst	playerX
+	bpl	10$
+	clr	playerX
+	clr	playerDX
+	tstb	glevelX
+	beq	99$
+	mov	#240., playerX
+	decb	glevelNewX	
+	br	90$
+10$:	cmp	playerX, #240.
+	ble	20$
+	mov	#240., playerX
+	clr	playerDX
+	cmpb	glevelX, #CGL_LEV_DX-1
+	bge	99$
+	clr	playerX
+	incb	glevelNewX
+	br	90$	
+20$:	tst	playerY
+	bpl	30$
+	clr	playerY
+	clr	playerDY
+	tstb	glevelY
+	beq	99$
+	mov	#208., playerY
+	decb	glevelNewY
+	br	90$
+30$:	cmp	playerY, #208.
+	ble	99$
+	mov	#208., playerY
+	clr	playerDY
+	cmpb	glevelY, #CGL_LEV_DY-1
+	bge	99$
+	clr	playerY
+	incb	glevelNewY	
+90$:	call	InitLevelField
+	call	RedrawFull
+99$:	return
+
+
+; process player using items
+Acting:
+	tst	plActing		; already using item?
+	bne	10$
+	; start action
+	tst	KeyShift
+	beq	99$
+	clr	KeyShift
+	mov	playerItem, R1		; selected item is 0..7
+	asl	R1			; to words
+	bisb	Items(R1), plActing
+	mov	plActing, R0
+	asl	R0
+	call	@ActingStartTable(R0)
+	return
+10$:	; process action
+	bit	#1, frameCount
+	bne	99$
+	mov	plActing, R0
+	asl	R0
+	call	@ActingTable(R0)
+99$:	return
+
+ActingStartTable:
+	.WORD	AcStartNone, AcStartLight, AcStartSpade
+ActingTable:
+	.WORD	ActingNone, ActingNone, ActingSpade
+
+; nothing to do - clear plActing variable
+AcStartNone:
+	clr	plActing
+	return
+
+AcStartLight:
+	clr	plActing
+	return
+
+AcStartSpade:
+	; can't use in climbing
+	cmp	playerState, #PLSCLIMBING
+	bne	10$
+	clr	plActing
+	return
+10$:	clr	plActingArg2	
+	tst	KeyUp			; digging up?
+	beq	20$
+	mov	#3, plActingArg1
+	return
+20$:	tst	KeyDown			; digging down?
+	beq	30$
+	mov	#1, plActingArg1
+	return
+30$:	cmp	playerDir, #PLDRIGHT
+	bne	40$
+	clr	plActingArg1
+	return
+40$:	mov	#2, plActingArg1
+	return
+
+ActingNone:
+	return
+
+ActingSpade:
+	inc	plActingArg2		; increase animation
+	cmp	plActingArg2, #3	; max animation
+	blt	99$
+	clr	plActing		; stop digging
+99$:	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Items
+; //////////////////////////////////////////////////////////////////////////////
+
+; clear items and item counts
+ClearItems:
+	mov	#Items, R0
+	mov	#8., R3
+	clr	(R0)+
+	sob	R3, .-2
+	return
+
+
+; add item to empty slot (if any), R1 - item ID
+AddItem:
+	mov	#Items+14., R0		; searching backwards
+	mov	#8., R3
+	clr	R2
+10$:	; check if we already have item and for empty slot
+	cmpb	(R0), R1		; do we have it already
+	beq	40$			; if yes - increase count
+	tst	(R0)			; is it empty slot?
+	bne	20$			; no - continue
+	mov	R0, R2			; save 'empty' slot addr
+20$:	dec	R0
+	dec	R0
+	sob	R3, 10$
+	; have empty slot?
+	tst	R2			; have empty slot addr?
+	beq	99$			; no - just exit
+	mov	R1, (R2)		; put item #
+	mov	R2, R0			; continue to set count
+40$:	inc	R0
+	cmpb	(R0), #99.		; max items is 99.
+	bge	99$
+	incb	(R0)			; increase item count
+	tst	(PC)+			; skip next with C cleared
+99$:	sec				; C=1 - item was not added
+	return
+
+
+; update player items on screen
+UpdateItems:
+	mov	#Items, varAddr		; item 
+	mov	ItemBoxVAddr, varAddr3	; vaddr of item box
+10$:	movb	@varAddr, R0		; get item #
+	bne	30$			; have any item?
+	; clear item box, R0 is already 0
+	mov	varAddr3, R1
+	.ppexe	#CmdDrawTileVaddr	; draw tile #0 = clear
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	varAddr3, (R4)	
+	mov	#16., R3
+	mov	#SCRWID-1, R1
+20$:	clr	(R5)
+	inc	(R4)
+	clr	(R5)
+	add	R1, (R4)
+	sob	R3, 20$
+	br	90$
+30$:	; draw item in item box
+	movb	ItemBaseSpr(R0), R0	; item sprite #
+	bic	#177400, R0		; clear high byte
+	mov	varAddr3, R1
+	.ppexe	#CmdUpdItem
+	mul	#96., R0		; sprites are 32(mask)+64 bytes
+	add	#SpritesAddr, R1	; sprite addr -> R1
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	R5, R2
+	inc	R2
+	mov	varAddr3, (R4)	
+	mov	#16., R3
+	mov	#SCRWID-1, R0
+40$:	inc	R1			; skip mask
+	inc	R1
+	movb	(R1)+, (R5)
+	inc	R1
+	movb	(R1), (R2)
+	inc	(R4)
+	dec	R1
+	movb	(R1)+, (R5)
+	inc	R1
+	movb	(R1)+, (R2)
+	add	R0, (R4)
+	sob	R3, 40$
+	; TODO: draw number of items
+90$:	add	#SCRWID*21., varAddr3
+	add	#2, varAddr
+	cmp	varAddr, #Items+16.
+	blo	10$
+	return
+
+
+; test for keyboard pressing [1..8]
+ProcItemKeys:
+	mov	#8., R1
+	mov	#Key8, R0
+10$:	tst	(R0)+			; test one key at (R0)
+	bne	30$
+	sob	R1, 10$
+	return
+30$:	clr	-(R0)			; clear key state
+	dec	R1			; R1 = [0..7] pressed key [1..8]
+	cmp	R1, playerItem
+	bne	40$			; item already selected
+	return
+40$:	mov	R1, playerItemNew
+	; draw old selected item box in black color
+	mov	playerItem, R0
+	clr	R1
+	call	DrawItemBox
+	; draw new selected item box in white color
+SelectNewItem:
+	mov	playerItemNew, R0
+	mov	#177777, R1
+	call	DrawItemBox
+	mov	playerItemNew, playerItem
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Objects
+; //////////////////////////////////////////////////////////////////////////////
+
+; buffer objects (not all objects need drawing, e.g. triggers)
+BufferObjects:
+	mov	#LevelObj, R0
+10$:	mov	(R0), R1
+	beq	20$
+	cmpb	R1, #TOBJ_ITEM
+	beq	50$
+	cmpb	R1, #TOBJ_DUMMY
+	beq	50$
+20$:	add	#COBJ_LEN*2, R0
+	cmp	R0, #LevelObjEnd
+	blo	10$
+	return
+50$:	mov	R0, -(SP)
+	call	BufferObject
+	mov	(SP)+, R0
+	br	20$
+
+
+; process level objects routine
+ProcessObjects:
+	mov	#LevelObj, Process000+2
+Process000:
+	mov	#0, R0			; addr of object struct
+	mov	(R0), R1		; R1=[subtype][type]
+	beq	20$			; have object?
+	mov	R1, R2
+	clrb	R2
+	swab	R2			; R2 = subtype
+	bic	#^B1111111100000000, R1	; R1 = type
+	asl	R1
+	call	@ProcessTable(R1)
+20$:	add	#COBJ_LEN*2, Process000+2
+	cmp	Process000+2, #LevelObjEnd
+	blo	Process000
+	return
+
+ProcessTable:
+	.word	ProcObjNone, ProcObjNone, ProcObjItem, ProcObjDummy, ProcObjTrig
+
+; nothing to process
+ProcObjNone:
+	return
+
+; process object item - set sprite (TODO: need to set just once?) and check for collisions with player
+; R0=addr of obj, R2=subtype=item #
+ProcObjItem:
+	; test collision with player
+	mov	4(R0), R4
+	mov	playerX, R5
+	call	100$
+	bcc	99$
+	mov	6(R0), R4
+	mov	playerY, R5
+	call	100$
+	bcc	99$
+	; collided - try add item to inventory
+	clr	(R0)
+	mov	R2, R1
+	call	AddItem
+	call	UpdateItems
+99$:	return
+; compare coordinates to be inside
+100$:
+	; 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15
+	add	#12., R4		; 4th pixel from right of obj
+	add	#3., R5			; 4th pixel from left of player
+	cmp	R5, R4			; player is far right
+	bgt	120$
+	sub	#9., R4			; 4th pixel from left of obj
+	add	#9., R5			; 4th pixel from right of player
+	cmp	R5, R4
+	blt	120$			; player is far left
+	sec
+	return
+120$:	clc
+	return
+
+; dummy object
+ProcObjDummy:
+	return
+
+; trigger object
+ProcObjTrig:
+	; get minimal distance from trigger center to player
+	mov	4(R0), R4
+	sub	playerX, R4
+	bpl	10$
+	neg	R4
+10$:	mov	6(R0), R5
+	sub	playerY, R5
+	bpl	20$
+	neg	R5
+20$:	cmp	R4, R5
+	blo	30$
+	mov	R4, R5
+30$:	; R5 = max distance by X or Y
+	cmp	R5, #12.		; TODO: check against variable distance
+	ble	50$
+	return
+50$:	mov	2(R0), R1		; event #
+	call	RunEvent
+	return
+
+
+; find object by [type][subtype], if not found - point R0 to playerObj
+; R1=[type][subtype]
+ObjFindByType:
+	mov	#LevelObj, R0
+10$:	cmp	(R0), R1
+	beq	99$
+	add	#COBJ_LEN*2, R0
+	cmp	R0, #LevelObjEnd
+	blo	10$
+	; not found
+	mov	#playerObject, R0
+99$:	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Events
+; //////////////////////////////////////////////////////////////////////////////
+
+
+; runs game event, R1=event #
+;
+RunEvent:
+	call	SetVreg
+	mov	R0, -(SP)		; save object addr
+	asl	R1
+	mov	EventsTable(R1), GetA12
+10$:	call	GetB12
+	beq	99$
+	cmpb	R0, #EVC_CLR
+	bne	20$
+	; clear trigger
+	mov	(SP), R0
+	clr	(R0)
+	br	10$
+20$:	cmpb	R0, #EVC_MSG
+	bne	30$
+	call	GetB12			; R0=msg #
+	mov	R0, R5			; save it for now
+	call	GetB12			; R0=obj type
+	mov	R0, R1
+	swab	R1
+	clrb	R1
+	call	GetB12			; R0=obj subtype
+	bisb	R0, R1
+	swab	R1			; R1=[obj type][obj subtype]
+	; try to find such object 
+	call	ObjFindByType		; R0=obj addr or #playerObj if notfound
+	mov	4(R0), R1		; X coord in buffer
+	ash	#-3, R1			; make it 8-pix
+	add	#FieldX, R1		; adjust with buffer X-position
+	mov	6(R0), R2		; Y coord in buffer
+	add	#FieldY, R2		; adjust with buffer Y-position
+	mov	R5, R0			; restore msg #
+	.ppexe	#CmdPrintMsg
+	clr	KeyAny			; wait for
+	tst	KeyAny			; press 'anykey'
+	beq	.-4
+	call	RedrawFull
+	br	10$
+30$:
+99$:	tst	(SP)+
+	return
+
+; //////////////////////////////////////////////////////////////////////////////
+; // UTILS, DEBUG, ETC
+; //////////////////////////////////////////////////////////////////////////////
+
+@include inc_cpu_utils.mac
+
+; setup regs for work with vram
+SetVreg:
+	mov	#176640, R4
+	mov	#176642, R5
+	return
+
+; get byte -> R1 from vaddr and advance it
+GetB12:	mov	(PC)+, R0
+GetA12:	.word	0			; vram addr rel to 200000
+	inc	GetA12
+GetR12:	sec
+	ror	R0
+	bcs	10$
+	mov	R0, @#176640
+	movb	@#176642, R0
+	return
+10$:	mov	R0, @#176640
+	movb	@#176643, R0
+	return
+	
+; vsync wait cycle
+VSyncWait:
+	inc	CpuWaitCount0		; empty cycles counter
+	cmp	VSyncCount1, (PC)+	; check for X vsync
+VSyncX:	.WORD	2
+	blo	VSyncWait
+	clr	VSyncCount1
+	inc	FrameCount
+	mov	CpuWaitCount0, CpuWaitCount
+	clr	CpuWaitCount0
+	.ppexe	#CmdFixWait		; get PPU empty (wait) cycles
+	return
+
+; debug info
+DebugInfo:
+	tst	DebugMode
+	bne	.+4
+	return
+	bit	#^B1111, FrameCount	; once in 16 frames
+	beq	.+4
+	return
+	mov	#8.*SCRWID+1+VADDR, R1
+	mov	KeyCurrent, R0		; pressed/released key
+	call	PrintBinaryWord
+	mov	#8.*SCRWID+10.+VADDR, R1
+	mov	CpuWaitCount, R0	; remaining wait cycles 
+	call	PrintOctalWord
+	mov	#8.*SCRWID+14.+VADDR, R1
+	mov	PpuWaitCount, R0	; remaining PPU wait cycles 
+	call	PrintOctalWord
+	return
+
+; key K1 - RGB / GRB switch
+CheckColors:	
+	tst	KeyK1
+	bne	10$
+	return
+10$:	clr	KeyK1
+	com	RgbMode	
+	bne	20$
+	mov	#^B1101110010011000, R0 ; swap R&G bits
+	mov	#^B1111111010111010, R1
+	mov	#^B0000000000010000, R2
+	mov	#^B0000000000010111, R3
+	br	30$
+20$:	mov	#^B1011101010011000, R0	; YRGB for 011 010 001 000
+	mov	#^B1111111011011100, R1	; YRGB for 111 110 101 100
+	mov	#^B0000000000010000, R2 ; no cursor
+	mov	#^B0000000000010111, R3 ; 320x288, max luminance
+30$:	.ppexe	#CmdUpdPalette		; update palette & resolution
+	return
+
+; key STOP - restart all
+CheckStop:
+	tst	KeyStop
+	beq	99$
+	clr	KeyStop			; release STOP
+	clr	Pause			; unpause
+	clr	CurrentMode		; reset mode
+99$:	return
+
+; key K2 - debug on|off (and restart)
+CheckDebug:
+	tst	KeyK2
+	beq	99$
+	clr	KeyK2			; release K2
+	clr	Pause			; unpause
+	com	DebugMode		; debug on|off
+	clr	CurrentMode		; reset mode
+99$:	return
+
+; 'empty' interrupt
+RtiAdr:	inc	(PC)+
+RtiCnt:	.word	0
+	rti
+
+; vsyinc interrupt
+VSync:	inc	VSyncCount1		; this one is used in CPU
+	inc	VSyncCount2		; this one is used in PPU for music
+	rti
+	
+; //////////////////////////////////////////////////////////////////////////////
+; // DATA 
+; //////////////////////////////////////////////////////////////////////////////
+
+CpuWaitCount0:	.WORD	0	; to measure wait time
+CpuWaitCount:	.WORD	0	; CPU empty cycles counter
+FrameCount:	.WORD	0	; 'frame' counter
+
+Pause:		.WORD	0	; <>0 - paused
+
+CurrentMode:	.WORD	0	; game mode (0-reset, 1-menu.. etc)
+RgbMode:	.WORD	0	; RGB/GRB switch
+DebugMode:	.WORD	177777	; debug mode switch
+
+glevelX:	.byte	0
+glevelY:	.byte	0
+glevelNewX:	.byte	0
+glevelNewY:	.byte	0
+
+; player states
+PLSWALKING  = 0
+PLSFALLING  = 1
+PLSJUMPING  = 2
+PLSCLIMBING = 3
+PLSDYING    = 4
+; player directions
+PLDFACE  = 0
+PLDRIGHT = 1
+PLDLEFT  = 2
+PLDBACK  = 3
+
+jumpTableDY:	.byte	-4, -4, -3, -3, -2, -2, -1, -1, 0, 0
+jumpVelocity:	.word	0
+
+SPPAniTable:	.BYTE	-1, 0, 1, 0	; walking animation sprites addition
+
+drawObject:	.WORD	0		; for buffer drawing
+drawSpr:	.WORD	0
+drawX:		.WORD	0
+drawY:		.WORD	0
+
+playerObject:
+; --- PLAYER ------------
+playerId:	.WORD	1		; player is with id #1
+playerSpr:	.WORD	5.		; default player spr
+playerX:	.WORD	0
+playerY:	.WORD	48.
+playerDir:	.WORD	PLDFACE
+playerState:	.WORD	PLSWALKING
+
+playerDX:	.WORD	0
+playerDY:	.WORD	0
+playerAni:	.WORD	0
+playerItem:	.WORD	1		; currently selected item slot [0..7]
+playerItemNew:	.WORD	1		; item slot to be selected on this frame
+
+plActing:	.WORD	0		; item number player is using now (it maybe not currently selected)
+plActingArg1:	.WORD	0		; parameter 1 for usage (e.g. direction for spade)
+plActingArg2:	.WORD	0		; parameter 2 for usage (e.g. animation # for spade)
+; -----------------------
+PlayerObjectEnd:
+
+; player item objects [0..7] (selected with 1..8), low byte - item #, high byte - item count
+Items:		.word	0, 0, 0, 0, 0, 0, 0, 0
+
+		;	0    1    2
+ItemBaseSpr:	.BYTE	00., 10., 11.
+		.EVEN
+
+; some common-used variables
+varX:		.WORD	0
+varY:		.WORD	0
+varDX:		.WORD	0
+varDY:		.WORD	0
+varAddr:	.WORD	0
+varAddr2:	.WORD	0
+varAddr3:	.WORD	0
+
+		;	0  1  2  3  4  5  6  7  8  9
+TilesWeight:	.BYTE	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 0
+		.BYTE	0, 0, 0, 0, 0, 3, 3, 0, 0, 0	; 10
+		.BYTE	0, 3, 3, 3, 3, 1, 1, 0, 0, 0	; 20
+		.BYTE	0, 3, 0, 0, 0, 0, 0, 0, 0, 0	; 30
+
+EventsTable:
+	.word	0
+	.word	EventMsg1-200000,  EventMsg2-200000
+
+
+@include inc_cpu_sprites.mac
+
+Level:		.blkw	FieldDX*FieldDY
+LevelEnd:
+LevelObj:	.blkw	CLV_MAX_OBJ * COBJ_LEN		; level objects
+LevelObjEnd:
+
+VBufferSize = FieldDX*FieldDY*CTILE_SIZE		; one buffer size in bytes = DX * DY * tile16 size of one plane
+VBuffer1:	.blkb	VBufferSize
+VBuffer2:	.blkb	VBufferSize
+
+; ////////////////////////////////////////////////////////////////////////////
+; // END CPU MAIN RAM
+; ////////////////////////////////////////////////////////////////////////////
+END:
+; RAM will be cleared after this
+
+; ////////////////////////////////////////////////////////////////////////////
+; // VRAM DATA
+; ////////////////////////////////////////////////////////////////////////////
+
+.=VDATA*2
+
+@include inc_levels.mac
+
+EventMsg1:
+	.byte	EVC_CLR,   EVC_MSG,9.,TOBJ_DUMMY,0,   0
+EventMsg2:
+	.byte	EVC_CLR,   EVC_MSG,10.,TOBJ_ITEM,ITEM_SPADE,    0
+
+ENDVram12:

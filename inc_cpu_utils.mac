@@ -1,0 +1,636 @@
+; levelY to buffer addr
+LevYBufOfs:
+	.WORD	VBuffer1+00000, VBuffer1+01000, VBuffer1+02000, VBuffer1+03000
+	.WORD	VBuffer1+04000, VBuffer1+05000, VBuffer1+06000, VBuffer1+07000
+	.WORD	VBuffer1+10000, VBuffer1+11000, VBuffer1+12000, VBuffer1+13000
+	.WORD	VBuffer1+14000, VBuffer1+15000, VBuffer1+16000, VBuffer1+17000
+
+; levelY to screen addr
+LevYScrOfs:
+	.WORD	<00*1200+VADDR+2405>, <01*1200+VADDR+2405>
+	.WORD	<02*1200+VADDR+2405>, <03*1200+VADDR+2405>
+	.WORD	<04*1200+VADDR+2405>, <05*1200+VADDR+2405>
+	.WORD	<06*1200+VADDR+2405>, <07*1200+VADDR+2405>
+	.WORD	<10*1200+VADDR+2405>, <11*1200+VADDR+2405>
+	.WORD	<12*1200+VADDR+2405>, <13*1200+VADDR+2405>
+	.WORD	<14*1200+VADDR+2405>, <15*1200+VADDR+2405>
+	.WORD	<16*1200+VADDR+2405>, <17*1200+VADDR+2405>
+
+ItemBoxVaddr:	
+	.word	            <VADDR+2402>, <SCRWID*021.+VADDR+2402>, <SCRWID*042.+VADDR+2402>, <SCRWID*063.+VADDR+2402>
+	.word	<SCRWID*084.+VADDR+2402>, <SCRWID*105.+VADDR+2402>, <SCRWID*126.+VADDR+2402>, <SCRWID*147.+VADDR+2402>
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // SPRITES
+; //////////////////////////////////////////////////////////////////////////////
+
+
+; draw game field border and item boxes
+DrawFieldBorder:
+	; draw sprites border around the field
+	mov	#FieldY-8.*SCRWID+FieldX-1+VADDR, R1
+	mov	#FieldDY*16.+8.*SCRWID, R4
+	mov	#^B0000000100000111, R2	; blue background, cyan foreground, color used for DrawTile8
+	; left top corner
+	clr	R0
+	.ppexe	#CmdDrawTile8Vaddr
+	; left bottom corner
+	inc	R0
+	add	R4, R1
+	.ppexe	#CmdDrawTile8Vaddr
+	; horiz lines
+	sub	R4, R1
+	inc	R1
+	mov	#FieldDX*2, R3
+	inc	R0
+	inc	R0
+10$:	dec	R0
+	.ppexe	#CmdDrawTile8Vaddr
+	add	R4, R1
+	inc	R0
+	.ppexe	#CmdDrawTile8Vaddr
+	sub	R4, R1
+	inc	R1
+	sob	R3, 10$
+	; right top corner
+	inc	R0
+	.ppexe	#CmdDrawTile8Vaddr
+	; right bottom corner
+	inc	R0
+	add	R4, R1
+	.ppexe	#CmdDrawTile8Vaddr
+	; vert lines
+	mov	#FieldY*SCRWID+FieldX-1+VADDR, R1
+	mov	#FieldDX*2+1, R4
+	mov	#FieldDY*2, R3
+	inc	R0
+20$:	.ppexe	#CmdDrawTile8Vaddr
+	add	R4, R1
+	inc	R0
+	.ppexe	#CmdDrawTile8Vaddr
+	sub	R4, R1
+	add	#8.*SCRWID, R1
+	dec	R0
+	sob	R3, 20$
+	; draw 1..7 item boxes
+	mov	#1, varY
+50$:	mov	varY, R0
+	clr	R1
+	call	DrawItemBox
+	inc	varY
+	cmp	varY, #8.
+	blo	50$
+	return
+	
+	
+; draw item box border and number
+; R0 - number [0..7], R1=177777-set bits | =0-clear bits
+DrawItemBox:
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	R0, R2
+	asl	R2
+	mov	ItemBoxVaddr(R2), (R4)
+	; modifying code
+	mov	#010000, R2		; modificator bis|bic
+	mov	R0, 00$			; number to draw [1..7]
+	inc	00$
+	mov	R1, 01$			; color of square (177777|0)
+	beq	10$
+	bis	R2, 40$
+	bis	R2, 54$
+	bis	R2, 56$
+	bic	R2, 50$			; modifying commands to ...
+	bic	R2, 52$			; e.g. bis R2, (R5) = 050215
+	bis	R2, 30$			;      bic R1, (R5) = 040215
+	bis	R2, 32$
+	br	20$
+10$:	bic	R2, 40$
+	bic	R2, 54$
+	bic	R2, 56$
+	bis	R2, 50$			; modifying commands to bic
+	bic	R2, 52$
+	bic	R2, 30$
+	bic	R2, 32$	
+20$:	; square 18x18
+	sub	#SCRWID, (R4)
+	mov	(PC)+, R0
+01$:	.WORD	0			; box horiz lines color word
+	mov	R0, (R5)
+	inc	(R4)
+	mov	R0, (R5)
+	add	#SCRWID*17., (R4)
+	mov	R0, (R5)
+	dec	(R4)
+	mov	R0, (R5)
+	sub	#SCRWID*17.+1, (R4)
+	mov	#^B1000000010000000, R1
+	mov	#^B0000000100000001, R2
+	mov	#18., R3
+30$:	bic	R1, (R5)
+	add	#3, (R4)
+32$:	bic	R2, (R5)
+	add	#SCRWID-3, (R4)
+	sob	R3, 30$
+	; number 4x5
+	mov	#SCRWID, R1
+	sub	#SCRWID*7, (R4)
+54$:	bis	#^B0011111000111110, (R5)
+	add	R1, (R4)
+	mov	(PC)+, R0
+00$:	.word	1
+	asl	R0
+	asl	R0
+	asl	R0
+	add	#SprNumbers45, R0
+	mov	#5, R3
+40$:	bis	#^B0011111000111110, (R5)
+	movb	(R0)+, R2		; not need to clean upper byte
+	asl	R2
+	asl	R2
+50$:	bic	R2, (R5)		; change to bic to change color
+	swab	R2			; bis - 050215, bic - 040215
+52$:	bic	R2, (R5)
+	add	R1, (R4)
+	sob	R3, 40$
+56$:	bis	#^B0011111000111110, (R5)
+	return
+
+
+; text lines, varAddr - addr of [x, y, id, height] elements, x==0 - end
+PrintTextLines:
+	mov	varAddr, R5
+	clr	R1
+	bisb	(R5)+, R1		; R1 = x
+	beq	99$			; if == 0 - exit
+	clr	R2
+	clr	R0
+	bisb	(R5)+, R2		; R2 = y
+	bisb	(R5)+, R0		; R0 = text ID
+	mov	R5, varAddr		; update to next element
+	mov	#CmdPrintStr, R5
+	call	PPUExecute
+	br	PrintTextLines
+99$:	return
+
+
+; fill screen with /////////
+ScreenBackground:
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	#SCRWID, R1
+	mov	#64., R0		; first line length (not random)
+	mov	#SCRWID*8.-1, varX	; starting X
+10$:	mov	varX, R2
+	clr	R3
+	asr	R2
+	rol	R3
+	asr	R2
+	rol	R3
+	asr	R2
+	rol	R3			; R2=X/8, R3=X%8 mirrored
+	inc	R2			; R2=X/8+1
+	mov	R2, (PC)+		; store it for off-screen detection
+15$:	.WORD	0			; off-screen detection variable
+	add	#077777, R2		; get initial vaddr -> R2
+	mov	R2, (R4)		; set initial vaddr
+	asl	R3			; get initial point mask
+	mov	100$(R3), R2		; it's faster than ash Rx,Rx
+	; line cycle
+20$:	mov	#288., R3		; cycle by screen height
+30$:	dec	R0			; dec line length
+	ble	95$			; need to invert line color and get new length?
+60$:	bis	R2, (R5)		; set|clear pix
+	asr	R2			; shift pix left (on display)
+	beq	90$			; end of pixel mask
+70$:	add	R1, (R4)		; next Y
+	sob	R3, 30$
+	; need next line?
+	dec	varX
+	bgt	10$			; will not use X=0
+	call	PPUWait			; wait if PPU isnt finished yet
+	return	
+; end of 8-pix block
+90$:	dec	(R4)			; dec vaddr
+	dec	15$			; dec current X*8
+	bne	92$			; out of screen?
+	add	#SCRWID, (R4)		; go to right end
+92$:	bis	#200, R2		; new pixel position
+	br	70$
+; end of line
+95$:	mov	#010000, R0		; bis|bic modifier
+	xor	R0, @#60$		; change between bis and bic
+	call	Random			; new line length
+	bic	#^B1111111110000000, R0	; max 128-pix line length
+	br	60$
+100$:	.WORD	^B00000001
+	.WORD	^B00000010	
+	.WORD	^B00000100
+	.WORD	^B00001000
+	.WORD	^B00010000
+	.WORD	^B00100000
+	.WORD	^B01000000
+	.WORD	^B10000000
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Buffer 
+; //////////////////////////////////////////////////////////////////////////////
+
+ClearVBuffer:
+	.ppexe	#CmdClearVBuffer
+	mov	#VBuffer1, R0
+	mov	#VBufferSize, R3	; there are 2 buffers
+	clr	(R0)+			; so - size in words
+	sob	R3, .-2
+	return
+
+
+; buf 16x16 tile, R0-tile ID, R1-levelX, R2-levelY
+BufTile:
+	bic	#^B1111111100000000, R0	; clear high byte (can be trash in there)
+	.ppexe	#CmdBufTile
+	; get buffer addr
+	asl	R2
+	mov	LevYBufOfs(R2), R4
+	asl	R1			; levelX*2 (tile width is 1 word)
+	add	R1, R4			; R4=buf1 addr
+	mov	R4, R5
+	add	#VBufferSize, R5	; R5=buf2 addr
+	; get tile addr
+	ash	#6., R0			; *64 (32 words)
+	add	#TilesAddr, R0		; R0=tile addr
+	;
+	mov	#BUFWID-2, R1		; buf addition
+	mov	#4., R3
+10$:	mov	(R0)+, (R4)+		; to buffer 1
+	mov	(R0)+, (R5)+		; to buffer 2
+	add	R1, R4
+	add	R1, R5
+	mov	(R0)+, (R4)+		; to buffer 1
+	mov	(R0)+, (R5)+		; to buffer 2
+	add	R1, R4
+	add	R1, R5
+	mov	(R0)+, (R4)+		; to buffer 1
+	mov	(R0)+, (R5)+		; to buffer 2
+	add	R1, R4
+	add	R1, R5
+	mov	(R0)+, (R4)+		; to buffer 1
+	mov	(R0)+, (R5)+		; to buffer 2
+	add	R1, R4
+	add	R1, R5
+	sob	R3, 10$
+	return
+
+
+; draw 16x16 from buffer to screen, R1-levelX, R2-levelY
+Buf2Scr16:
+	.ppexe	#CmdBuf2Scr16
+	mov	#176640, R4
+	; to screen addr
+	asl	R2
+	mov	LevYScrOfs(R2), R0	; R0=starting screen line addr
+	asl	R1			; R1=LevelX*2
+	add	R1, R0			; R0=scr addr
+	mov	R0, (R4)		; screen addr -> @#176640
+	; to buffer addr
+	mov	LevYBufOfs(R2), R0
+	add	R1, R0			; buffer 1 addr -> R0
+	;
+	mov	#SCRWID-1, R1
+	; 1st buffer
+	mov	R0, -(SP)
+	mov	(R4), -(SP)
+	mov	#16., R3
+	mov	#176642, R5
+10$:	movb	(R0)+, (R5)
+	inc	(R4)
+	movb	(R0)+, (R5)
+	add	#BUFWID-2, R0
+	add	R1, (R4)
+	sob	R3, 10$
+	; 2nd buffer
+	mov	(SP)+, (R4)
+	mov	(SP)+, R0
+	add	#VBufferSize, R0
+	mov	#16., R3
+	inc	R5			; R5=176643
+20$:	movb	(R0)+, (R5)
+	inc	(R4)
+	movb	(R0)+, (R5)
+	add	#BUFWID-2, R0
+	add	R1, (R4)
+	sob	R3, 20$
+	return
+
+
+; 16x16 sprite -> buffer with mask, R0=spr #, R1=x, R2=y
+BufSprite:
+	.ppexe	#CmdBufSprite		; execute same in PPU
+	; get sprite addr
+	mov	R0, R4			; *(32+64) (bytes) mask + colors
+	ash	#6., R0
+	ash	#5., R4
+	add	R4, R0
+	add	#SpritesAddr, R0	; R0 = sprite addr
+	; get buffer addr - (Y*32) + (X/8 even)
+	ash	#5., R2			; R2=Y*32
+	add	#VBuffer1, R2		; R2=buffer starting line
+	mov	R1, R5
+	asr	R5
+	asr	R5
+	asr	R5
+	asr	R5			; 14T
+	asl	R5			; 14T faster than 32T bic #1, R5
+	add	R2, R5			; R5 = buf addr
+	; R0=spr addr, R5=buf1 even addr, R1=X
+	mov	R0, -(SP)
+	mov	R1, -(SP)
+	mov	R5, -(SP)
+	call	BufSprite1
+	mov	(SP)+, R5
+	mov	(SP)+, R1
+	mov	(SP)+, R0
+	add	#VBufferSize, R5	
+
+; plane-2 buffer routine, R0=spr addr, R5=buf addr
+	mov	#16., R4
+	bic	#^B1111111111110000, R1	; X % 16
+	bne	20$
+	; zero shift
+	; R0=spr addr, R5=buf even addr, R4=height
+	mov	#BUFWID, R1
+10$:	bic	(R0)+, (R5)		; mask word
+	inc	R0			; skip plane-1 colors
+	inc	R0
+	bis	(R0)+, (R5)		; plane-2 color word
+	add	R1, R5			; buffer next line
+	sob	R4, 10$
+	return
+	; non-zero shift
+	; R0=spr addr, R5=buf even addr, R4=height
+20$:	mov	(R0)+, R3		; 32T mask word
+	clr	R2			; 14T R2:R3 - mask dword
+	ashc	R1, R2			; 92T (for R1=15) R2:R3 << R1
+	bic	R3, (R5)+		; 43T apply mask words
+	bic	R2, (R5)		; 43T
+	dec	R5			; 14T back to previous addr
+	dec	R5			; 14T
+	inc	R0			; 14T skip plane-1 colors
+	inc	R0			; 14T
+	mov	(R0)+, R3		; 32T color word
+	clr	R2			; 14T R2:R3 - color word
+	ashc	R1, R2			; 92T (for R1=15) R2,R3 << R1
+	bis	R3, (R5)+		; 43T apply color words
+	bis	R2, (R5)		; 43T
+	add	#BUFWID-2, R5		; 32T
+	sob	R4, 20$			; 32T|16T
+	; =568T*16
+	return
+
+; plane-1 buffer routine, R0=spr addr, R5=buf addr
+BufSprite1:
+	mov	#16., R4
+	bic	#^B1111111111110000, R1	; X % 16
+	bne	20$
+	; zero shift
+	; R0=spr addr, R5=buf even addr, R4=height
+	mov	#BUFWID, R1
+10$:	bic	(R0)+, (R5)		; mask word
+	bis	(R0)+, (R5)		; color word
+	inc	R0			; 14T skip plane-2 colors
+	inc	R0			; 14T
+	add	R1, R5			; 14T buffer next line
+	sob	R4, 10$			; 32T|16T
+	return
+	; non-zero shift
+	; R0=spr addr, R5=buf even addr, R4=height
+20$:	mov	(R0)+, R3		; 32T mask word
+	clr	R2			; 14T R2:R3 - mask dword
+	ashc	R1, R2			; 92T (for R1=15) R2:R3 << R1
+	bic	R3, (R5)+		; 43T apply mask words
+	bic	R2, (R5)		; 43T
+	dec	R5			; 14T back to previous addr
+	dec	R5			; 14T
+	mov	(R0)+, R3		; 32T color word
+	clr	R2			; 14T R2:R3 - color word
+	ashc	R1, R2			; 92T (for R1=15) R2,R3 << R1
+	bis	R3, (R5)+		; 43T apply color words
+	bis	R2, (R5)		; 43T
+	inc	R0			; 14T skip plane-2 colors
+	inc	R0			; 14T
+	add	#BUFWID-2, R5		; 32T
+	sob	R4, 20$			; 32T|16T
+	; =568T*16
+	return
+
+
+
+	
+; //////////////////////////////////////////////////////////////////////////////
+; // PRINT
+; //////////////////////////////////////////////////////////////////////////////
+
+; 4x5 numbers (aligned by 8 bytes)
+SprNumbers45:
+	.BYTE	7,5,5,5,7,0,0,0, 2,2,2,2,2,0,0,0
+	.BYTE	7,4,7,1,7,0,0,0, 7,4,6,4,7,0,0,0
+	.BYTE	5,5,7,4,4,0,0,0, 7,1,7,4,7,0,0,0
+	.BYTE	7,1,7,5,7,0,0,0, 7,4,4,4,4,0,0,0
+	.BYTE	7,5,7,5,7,0,0,0, 7,5,7,4,7,0,0,0
+	; shifted by 4 bit
+	.BYTE	160,120,120,120,160,0,0,0, 040,040,040,040,040,0,0,0
+	.BYTE	160,100,160,020,160,0,0,0, 160,100,140,100,160,0,0,0
+	.BYTE	120,120,160,100,100,0,0,0, 160,020,160,100,160,0,0,0
+	.BYTE	160,020,160,120,160,0,0,0, 160,100,100,100,100,0,0,0
+	.BYTE	160,120,160,120,160,0,0,0, 160,120,160,100,160,0,0,0
+	
+; print binary word (4x5 font), R0-word, R1-vram addr
+PrintBinaryWord:
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	R1, (R4)
+	mov	#SCRWID, R2
+	mov	#8., R3
+20$:	; first half of 8-bit vaddr
+	mov	#SprNumbers45, R1	; sprite 0
+	asl	R0
+	bcc	30$
+	add	#8., R1			; sprite 1
+30$:	movb	(R1)+, (R5)		; using only plane 1
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	sub	#SCRWID*4, (R4)		; rewind vaddr
+	; second half - shifted sprites and BIS
+	mov	#<SprNumbers45+80.>, R1
+	asl	R0
+	bcc	40$
+	add	#8., R1
+40$:	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	sub	#SCRWID*4-1, (R4)	; .. and advance vaddr
+	sob	R3, 20$
+	return	
+ 
+; print octal word (4x5 font), R0 - word, R1-vram addr
+PrintOctalWord:
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	R1, (R4)
+	mov	#SCRWID, R2
+	mov	#3., R3
+	; 1st bit
+	clr	R1
+	asl	R0
+	rol	R1
+20$:	; first half of 8-bit vaddr
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#SprNumbers45, R1
+	; put bits
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	add	R2, (R4)
+	movb	(R1)+, (R5)
+	sub	#<SCRWID*4>, (R4)
+	; next 3-bits
+	clr	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1	
+	; second half - shifted sprites and BIS
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#<SprNumbers45+80.>, R1
+	; put bits
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	add	R2, (R4)
+	bisb	(R1)+, (R5)
+	sub	#SCRWID*4-1, (R4)		; advance vaddr to next byte
+	; next 3-bits
+	clr	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+	asl	R0
+	rol	R1
+	sob	R3, 20$
+	return	 
+
+
+; clear screen planes 1,2
+ClearScreen:
+	mov	#288.*SCRWID, R3
+	mov	#176640, R4
+	mov	#176642, R5	
+	mov	#VADDR, (R4)
+10$:	clr	(R5)
+	inc	(R4)
+	sob	R3, 10$
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Commands to PPU
+; //////////////////////////////////////////////////////////////////////////////
+
+CmdAddr:	.WORD	0		; addr in ppu command buffer
+
+; wait for queue complete
+PPUWait:
+	mov	#CmdBuffer, @#176640
+	tst	@#176642		; check commands buffer
+	bne	PPUWait			; still not ready
+	mov	#<CmdBuffer+1>, CmdAddr
+	return
+
+; ask PPU to process command buffer
+PPUFinish:
+	mov	CmdAddr, @#176640
+	clr	@#176642		; last command is STOP
+	mov	#CmdBuffer, @#176640
+	inc	@#176642		; start execution in PPU
+	return
+	
+; add command to PPU queue, R5-command, R0..R4 params
+PPUAdd: mov	R0, -(SP)		; save R0, R1
+	mov	R1, -(SP)
+	mov	#176640, R0
+	mov	#176642, R1
+	mov	CmdAddr, (R0)
+	mov	R5, (R1)		; command
+	inc	(R0)
+	mov	2(SP), (R1)		; parameters: R0
+	inc	(R0)
+	mov	(SP), (R1)		; R1
+	inc	(R0)
+	mov	R2, (R1)		; ...
+	inc	(R0)
+	mov	R3, (R1)
+	inc	(R0)
+	mov	R4, (R1)
+	inc	(R0)
+	clr	(R1)
+	add	#6., CmdAddr
+	mov	(SP)+, R1		; restore R1, R0
+	mov	(SP)+, R0
+	return
+
+; execute command in PPU, R5-command, R0..R4 params
+PPUExecute:
+	call	PPUWait
+	call	PPUAdd
+	call	PPUFinish
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // UTILS
+; //////////////////////////////////////////////////////////////////////////////
+
+; random with linear-feedback shift register (Galois)
+; random -> R0
+Random:	clc
+	ror	(PC)+
+Lfsr00:	.word	126341 		; 0ACE1
+	bcc	Lfsr03
+	mov	(PC)+, R0
+Lfsr01:	.word	132000		; 0B400
+	xor	R0, Lfsr00
+Lfsr03:	mov	Lfsr00, R0
+	return
+	
+; fatal error 
+Error:	br	.
+

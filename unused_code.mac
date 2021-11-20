@@ -1,0 +1,35 @@
+	; set lines table
+	; lines table starts with 18 lines that we won't use
+	; first 2 lines to set palette and resolution
+	; to set palette as soon as possible is ... important I think
+	mov	#1000, R0
+	mov	#^B1011101010011000, (R0)+	; YRGB for 011 010 001 000
+	mov	#^B1111111011011100, (R0)+	; YRGB for 111 110 101 100
+	clr	(R0)+		; vaddr not used here
+	mov	R0, (R0)
+	add	#2, (R0)
+	bis	#2, (R0)+	; next 4-word to set resolution
+	mov	#^B0000000000010000, (R0)+ ; no cursor
+	mov	#^B0000000000000111, (R0)+ ; 320x288, max luminance (..000111-640 ..010111-320 ..100111-160 ..110111-80)
+	clr	(R0)+		; vaddr not used here
+	mov	R0, (R0)
+	add	#2, (R0)+	; next are 2-word elements		
+	; second 16 unused lines
+	mov	#16., R5
+10$:	clr	(R0)+
+	mov	R0, (R0)
+	add	#2, (R0)+
+	sob	R5, 10$
+	; next 288 'main' lines from top
+	mov	#VADDR, R1
+	mov	#288., R5
+20$:	mov	R1, (R0)+
+	mov	R0, (R0)
+	add	#2, (R0)+
+	add	#80., R1
+	sob	R5, 20$
+	; cycle it to 'first' line
+	dec	R0
+	dec	R0
+	mov	#1120, (R0)+
+

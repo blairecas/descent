@@ -1,0 +1,556 @@
+; levelY to buffer addr
+LevYBufOfs:
+	.WORD	0, 1000, 2000, 3000, 4000, 5000, 6000, 7000
+	.WORD	10000, 11000, 12000, 13000, 14000, 15000, 16000, 17000
+
+; levelY to screen addr
+LevYScrOfs:
+	.WORD	<00*1200+102405>, <01*1200+102405>
+	.WORD	<02*1200+102405>, <03*1200+102405>
+	.WORD	<04*1200+102405>, <05*1200+102405>
+	.WORD	<06*1200+102405>, <07*1200+102405>
+	.WORD	<10*1200+102405>, <11*1200+102405>
+	.WORD	<12*1200+102405>, <13*1200+102405>
+	.WORD	<14*1200+102405>, <15*1200+102405>
+	.WORD	<16*1200+102405>, <17*1200+102405>
+
+; set registers for vram usage
+SetVreg:
+	mov	#177010, R4		; R4 = vaddr reg
+	mov	#177012, R5		; R5 = vdata reg
+	return
+; set second type of vaddr regs
+SetVreg2:
+	mov	#177010, R4		; R4 = vaddr reg
+	mov	#177024, R5		; R5 = vdata reg for output
+	return
+; from R1=X*8,R2=Y return R1=vaddr
+Coords8ToVaddr:
+	asl	R2			; get vaddr
+	asl	R2
+	add	VLinesTable(R2), R1	; get Y-line from lines table
+	return
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PRINT UTILS
+; //////////////////////////////////////////////////////////////////////////////
+
+; single height 6-pix width character print, 0-pix shift
+; input: R1=SCRWID, R3=DY=8., (R0)=char spr addr, (R4),(R5)-vaddr,vdata pair (177010, 177024)
+;        2(SP) - vaddr to output
+; return: R0 - next char print routine addr-2
+ChrPrint1x0:
+10$:	movb	(R0)+, (R5)		; draw 6-pix in byte, movb - do not clear background
+	add	R1, (R4)		; R1=80. here
+	sob	R3, 10$			; R3=8.
+	dec	2(SP)			; for not advance vaddr, next char is at same position
+	mov	PC, R0			; return next char routine addr-2
+	return
+; single height, 6-pix shift
+	dec	R1			; R1=79. - vaddr addition
+20$:	movb	(R0)+, R2
+	ash	#6., R2
+	movb	R2, (R5)
+	inc	(R4)
+	swab	R2
+	movb	R2, (R5)
+	add	R1, (R4)
+	sob	R3, 20$
+	mov	PC, R0			; return next char routine addr-2
+	return
+; single height, 4-pix shift
+	dec	R1
+30$:	movb	(R0)+, R2
+	ash	#4., R2
+	movb	R2, (R5)
+	inc	(R4)
+	swab	R2
+	movb	R2, (R5)
+	add	R1, (R4)
+	sob	R3, 30$
+	mov	PC, R0
+	return
+; single height, 2-pix shift
+40$:	movb	(R0)+, R2
+	asl	R2
+	asl	R2
+	movb	R2, (R5)
+	add	R1, (R4)
+	sob	R3, 40$
+	mov	#<ChrPrint1x0-2>, R0	; back to default 0-pix shift
+	return	
+
+
+; print string, R0 - ID of string in TxtTable, R1 - x*8, R2 - y
+; if R0 > 1000(8) - then R0 is string addr (can be in vaddr too)
+; codes in string - [0..7] - change color
+; registers: 177020, 177022 - background color (not used)
+PrintStr:
+	call	SetVreg2		; R4=177010, R5=177024
+	mov	#ChrPrint1x0, 30$+2	; set initial char print routine
+	call	PrintGetR0		; R0 = text address 
+	mov	R0, 10$+2		; set vaddr character pointer
+	call	Coords8ToVaddr		; R1 = vaddr
+	mov	R1, PrintSIVA		; initial vline address
+	mov	R1, -(SP)		; save it also
+	mov	#7, @#177016		; current color	
+10$:	; get character
+	mov	#100000, (R4)		; set current char addr
+	inc	10$+2			; advance it
+	mov	@#177012, R0		; get character, high byte is always zero !??? (honestly, i don't know)
+	beq	99$			; zero byte - exit
+	cmp	R0, #32.		; special code? (color)
+	bhis	20$			; no - continue to draw character
+	; set color or CR
+	cmp	R0, #10.		; is it CR?
+	bne	18$
+	add	#SCRWID*8., PrintSIVA	; new vline
+	mov	PrintSIVA, (SP)		; set it
+	mov	#ChrPrint1x0, 30$+2	; set initial char print routine for newline
+	br	10$
+18$:	mov	R0, @#177016		; set new text color
+	br	10$
+20$:	; prepare regs
+	asl	R0			; get font tile addr
+	asl	R0
+	asl	R0
+	add	#FontAddr-256., R0	; R0 = font tile addr (-256. because starting from char #32.)
+	mov	#SCRWID, R1		; vaddr next line addition
+	mov	#8., R3			; font DY
+	mov	(SP), (R4)		; set vaddr
+	; draw char
+30$:	call	ChrPrint1x0		; <-- this routine will be modified 
+	inc	R0			; return value is next routine <#addr-2>
+	inc	R0
+	mov	R0, 30$+2		; modify to next char printing routine addr
+	inc	(SP)			; advance vaddr to next char position
+	br	10$	
+99$:	tst	(SP)+			; restore stack used for vaddr
+	return 
+
+; if R0 <= 1000 - get text addr in R0
+; else R0 is already text address
+PrintGetR0:
+	cmp	R0, #1000		; R0 is addr or ID?
+	bhi	05$			; its addr
+	asl	R0			; get str addr from ID
+	mov	TxtTable(R0), R0
+05$:	return
+
+PrintMsgDX:	.word	0		; message DX
+PrintMsgDY:	.word	0		; message DY
+PrintMsgDX8:	.word	0		; message DX in 8-pix truncated
+PrintMsgDX8r:	.word	0		; message DX reminder within 8-pix
+PrintSIVA:	.word	0		; initial vline addr for using CR in text
+
+; get DX & DY of text
+PrintSetDXDY:
+	clr	R1			; DX
+	clr	R2			; DY
+10$:	clr	R3			; current DX
+20$:	mov	(R5), R0		; high byte is always 0 ???
+	beq	90$
+	inc	(R4)
+	cmp	R0, #32.		; is it printable?
+	blo	30$
+	inc	R3			; DX++
+	br	20$
+30$:	cmp	R0, #10.		; is it carriage return?
+	bne	20$			; no - get next character
+	; got CR
+	inc	R2			; DY++
+	cmp	R3, R1			; is current DX > max DX?
+	blos	10$			; no - repeat next line
+	mov	R3, R1
+	br	10$
+90$:	cmp	R3, R1			; compare for last line
+	blos	99$
+	mov	R3, R1
+99$:	inc	R2			; +last line
+	mov	R1, PrintMsgDX
+	mov	R2, PrintMsgDY
+	return
+
+; prepare buffer to print ingame message
+; R0=Text # or addr > 1000
+; will use VBuffer as output buffer
+PrintPrepare:
+	call	SetVreg			; R4=177010, R5=177012
+	call	PrintGetR0		; R0=text address
+	mov	R0, -(SP)		; save it
+	mov	R0, (R4)		; set vaddr for text
+	call	PrintSetDXDY		; set text size in PrintMsgDX, PrintMsgDY
+	mov	(SP)+, (R4)
+	; set vbuffer as output buffer
+	mov	#VBuffer0, R2
+	; first line
+	movb	#7, (R2)+		; white color for border
+	movb	#'¥, (R2)+		; +
+	call	PrintDXLine		; =
+	movb	#'¨, (R2)+		; +
+	movb	#10., (R2)+		; CR
+	; main message block
+10$:	movb	#'¡, (R2)+
+	clr	R1			; current line X
+20$:	mov	(R5), R0		; get character
+	beq	30$			; end?
+	inc	(R4)			; advance vaddr to next character 
+	cmp	R0, #10.		; is it CR?
+	beq	30$
+	; not CR - copy character and repeat
+	movb	R0, (R2)+
+	cmp	R0, #32.		; is it printable?
+	blo	20$
+	inc	R1			; increase current X if printable
+	br	20$
+30$:	; CR, add spaces to max DX
+	cmp	R1, PrintMsgDX
+	bhis	50$
+	movb	#32., (R2)+
+	inc	R1
+	br	30$
+50$:	movb	#7, (R2)+		; white color for border
+	movb	#'¡, (R2)+
+	movb	#10., (R2)+
+	tst	R0			; end of message?
+	bne	10$			; no - repeat for next line
+	; end of message line
+	movb	#7, (R2)+		; white color for border
+	movb	#'«, (R2)+
+	call	PrintDXLine
+	movb	#'®, (R2)+
+	clrb	(R2)			; set end of message
+	; adjust DX, DY with border
+	add	#2, PrintMsgDX
+	add	#2, PrintMsgDY
+	mov	PrintMsgDX, R0
+	mul	#6., R0
+	div	#8., R0
+	mov	R0, PrintMsgDX8
+	mov	R1, PrintMsgDX8r
+	return
+
+; set line of = chars to (R2)+
+PrintDXLine:
+	mov	PrintMsgDX, R3
+10$:	movb	#' , (R2)+
+	sob	R3, 10$
+	return
+
+;	áâ÷çäåöúéêëìíîïðòóôõæèãþûýÿùøüàñÁÂ×ÇÄÅÖÚÉÊËÌÍÎÏÐ
+;	‘’‡²´§¦µ¡¨®­¬ƒ„‰ˆ†€Š¯°«¥»¸± ¾¹º¶·
+;	ª©¢¤½¼…‚ŒŽ‹ÒÓÔÕÆÈÃÞÛÝßÙØÜÀÑ³£??????œ•ž–??”
+
+; prints message in box, R0=text addr or txt #, R1=X*8, R2=Y
+PrintMsg:
+	mov	R2, -(SP)
+	mov	R1, -(SP)
+	call	PrintPrepare
+	mov	(SP)+, R1
+	mov	(SP)+, R2
+	; adjust coords
+	mov	PrintMsgDY, R0
+	ash	#3, R0
+	sub	R0, R2
+	dec	R1
+	mov	PrintMsgDX8, R4
+	inc	R4
+	add	R1, R4			; R4=right border of msg in 8-pix
+	mov	#FieldDX*2+FieldX, R5
+	cmp	R4, R5
+	blt	1$
+	sub	R5, R4
+	sub	R4, R1
+1$:	; save coords again
+	mov	R2, -(SP)
+	mov	R1, -(SP)
+	; set vaddr
+	call	Coords8ToVaddr
+	call	SetVreg2
+	clr	@#177016		; foreground - black color
+;	clr	@#177020		; background - black also
+;	clr	@#177022		; we do not really need to set them
+	mov	R1, (R4)
+	; drawing box
+	mov	PrintMsgDX8r, R3
+	movb	100$(R3), R0		; reminder to pix to clear (don't worry about high byte)
+	mov	PrintMsgDY, R3		; need to get msgDY * 8
+	ash	#3, R3			; R3 = msgDY * 8
+	mov	#SCRWID, R1
+	sub	PrintMsgDX8, R1		; vaddr new line addition
+10$:	mov	PrintMsgDX8, R2
+20$:	mov	#377, (R5)		; set all pixels to foreground color
+	inc	(R4)
+	sob	R2, 20$
+	movb	R0, (R5)		; last pixels varies, movb needed for bis
+	add	R1, (R4)	
+	sob	R3, 10$
+	; print message
+	mov	#VBuffer0, R0
+	mov	(SP)+, R1
+	mov	(SP)+, R2
+	call	PrintStr
+	return
+100$:	.byte	0, ^B00000001, ^B00000011, ^B00000111, ^B00001111, ^B00011111, ^B00111111, ^B01111111
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // SPRITE UTILS
+; //////////////////////////////////////////////////////////////////////////////
+
+; 16x16 tile drawing, R0=tile #, R1=x*8, R2=y
+DrawTile:
+	asl	R2			; get vaddr
+	asl	R2
+	add	VLinesTable(R2), R1	; vaddr -> R1
+; draw tile with vaddr in R1
+DrawTileVaddr:
+	mov	#177010, R4
+	mov	#177012, R5
+	mov	R1, (R4)
+	mov	#SCRWID-1, R1		; vaddr addition
+	ash	#5., R0			; R0*32 (tile size in bytes)
+	add	#TilesAddr, R0		; get tile pointer
+	mov	#4., R3
+10$:	movb	(R0)+, (R5)
+	inc	(R4)
+	movb	(R0)+, (R5)
+	add	R1, (R4)
+	movb	(R0)+, (R5)
+	inc	(R4)
+	movb	(R0)+, (R5)
+	add	R1, (R4)
+	movb	(R0)+, (R5)
+	inc	(R4)
+	movb	(R0)+, (R5)
+	add	R1, (R4)
+	movb	(R0)+, (R5)
+	inc	(R4)
+	movb	(R0)+, (R5)
+	add	R1, (R4)	
+	sob	R3, 10$
+	return
+
+	
+; 8x8 1-bit tile drawing with vaddr, R0=tile #, R1=vaddr, R2=color [two bytes used]
+DrawTile8Vaddr:
+	movb	R2, @#00$+2		; put foreground color to mov command
+	swab	R2
+	movb	R2, @#10$+2		; put background color to mov command
+	mov	#177016, R2		; color select
+	mov	#177010, R4		; vaddr select
+	mov	#177024, R5		; paint pixels addr
+	mov	R1, (R4)
+	ash	#4., R0			; R0*16 (tile8 size in bytes)
+	add	#Tiles8Addr, R0		; get tile pointer
+	mov	#SCRWID, R1
+	mov	#8., R3
+10$:	mov	#1, (R2)
+	movb	(R0)+, (R5)
+00$:	mov	#7, (R2)
+	movb	(R0)+, (R5)
+	add	R1, (R4)
+	sob	R3, 10$
+	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Buffer 
+; //////////////////////////////////////////////////////////////////////////////
+
+ClearVBuffer:
+	mov	#VBuffer0, R0
+	mov	#<VBufferSize/2>, R3
+	clr	(R0)+
+	sob	R3, .-2
+	return
+	
+
+; buffer 16x16 tile, R0-tile ID, R1-levelX, R2-levelY
+BufTile:
+	; get buffer addr
+	asl	R2
+	mov	LevYBufOfs(R2), R5
+	asl	R1			; levelX*2 (tile width is 2 bytes)
+	add	R1, R5
+	add	#VBuffer0, R5		; R5 = buffer addr
+	; get tile addr
+	ash	#5., R0			; *32
+	add	#TilesAddr, R0		; R0 = tile addr
+	; draw
+	mov	#BUFWID, R1		; buf addition
+	mov	#4., R3
+10$:	mov	(R0)+, (R5)
+	add	R1, R5
+	mov	(R0)+, (R5)
+	add	R1, R5
+	mov	(R0)+, (R5)
+	add	R1, R5
+	mov	(R0)+, (R5)
+	add	R1, R5
+	sob	R3, 10$
+	return
+
+
+; draw 16x16 from buffer to screen, R1-levelX, R2-levelY
+Buf2Scr16:
+	mov	#177010, R4
+	mov	#177012, R5
+	; to screen addr
+	asl	R2
+	mov	LevYScrOfs(R2), R0
+	asl	R1			; LevelX*2 -> R1
+	add	R1, R0
+	mov	R0, (R4)		; set vaddr
+	; to buffer addr
+	mov	LevYBufOfs(R2), R0
+	add	R1, R0
+	add	#VBuffer0, R0		; R0=buffer addr
+	; draw
+	mov	#04., R3
+	mov	#SCRWID-1, R1
+	mov	#31., R2
+10$:	movb	(R0)+, (R5)
+	inc	(R4)
+	movb	(R0), (R5)
+	add	R1, (R4)
+	add	R2, R0
+	movb	(R0)+, (R5)
+	inc	(R4)
+	movb	(R0), (R5)
+	add	R1, (R4)
+	add	R2, R0
+	movb	(R0)+, (R5)
+	inc	(R4)
+	movb	(R0), (R5)
+	add	R1, (R4)
+	add	R2, R0
+	movb	(R0)+, (R5)
+	inc	(R4)
+	movb	(R0), (R5)
+	add	R1, (R4)
+	add	R2, R0
+	sob	R3, 10$
+	return
+
+
+; 16x16 sprite -> buffer with mask, R0=spr #, R1=x, R2=y
+BufSprite:
+	; get buffer addr - (Y*32) + (X/8 even)
+	ash	#5., R2			; Y*32
+	add	#VBuffer0, R2
+	mov	R1, R5
+	asr	R5
+	asr	R5
+	asr	R5
+	asr	R5			; 14T
+	asl	R5			; 14T faster than 32T bic #1, R5
+	add	R2, R5			; R5 = buf addr
+	; get sprite addr
+	ash	#6., R0			; *64 (bytes), sprite with mask
+	add	#SpritesAddr, R0	; R0 = sprite addr
+	mov	#16., R4
+	bic	#^B1111111111110000, R1	; X % 16
+	bne	20$
+	; zero shift
+	; R0=spr addr, R5=buf addr, R4=height
+	mov	#BUFWID, R1
+10$:	bic	(R0)+, (R5)
+	bis	(R0)+, (R5)
+	add	R1, R5
+	sob	R4, 10$
+	return
+	; non-zero shift
+	; R0=spr addr, R5=buf addr, R4=height
+20$:	mov	(R0)+, R3		; 32T mask word
+	clr	R2			; 14T R2:R3 - mask dword
+	ashc	R1, R2			; 92T (for R1=15) R2:R3 << R1
+	bic	R3, (R5)+		; 43T apply mask words
+	bic	R2, (R5)		; 43T
+	dec	R5			; 14T back to previous addr
+	dec	R5			; 14T
+	mov	(R0)+, R3		; 32T color word
+	clr	R2			; 14T R2:R3 - color word
+	ashc	R1, R2			; 92T (for R1=15) R2,R3 << R1
+	bis	R3, (R5)+		; 43T apply color words
+	bis	R2, (R5)		; 43T
+	add	#BUFWID-2, R5		; 32T
+	sob	R4, 20$			; 32T|16T
+	; =540T *16
+	return
+
+
+; set lines table starting from R0	
+LinesFromR0:
+	mov	#VLinesTable, R5	; first line addr in line table
+	mov	#SCRWID, R1		; vaddr addition
+	mov	#288., R3
+10$:	mov	R0, (R5)+
+	tst	(R5)+
+	add	R1, R0
+	sob	R3, 10$
+	return
+
+
+; hides screen to the out-of-screen 9 lines
+HideScreen:
+	mov	#SCRWID*296.+VADDR, R1	; vaddr of out-of-screen 297th line (from 0)
+	mov	#SCRWID*288.+VADDR, R2	; vaddr of out-of-screen 289th line
+	mov	#VLinesTable, R5
+	mov	#140., R3
+10$:	mov	R1, (R5)+
+	tst	(R5)+
+	sob	R3, 10$
+	mov	#8., R3
+20$:	mov	R2, (R5)+
+	tst	(R5)+
+	add	#SCRWID, R2
+	sob	R3, 20$
+	mov	#140., R3
+30$:	mov	R1, (R5)+
+	tst	(R5)+
+	sob	R3, 30$	
+	return
+
+
+; screen fade in, R0=[1..144.]
+FadeInScreen:
+	tst	R0
+	bne	2$
+	inc	R0
+2$:	cmp	R0, #144.
+	blos	10$
+	mov	#144., R0
+10$:	mov	#143.*4+VLinesTable, R4
+	mov	R4, R5
+	cmp	(R5)+, (R5)+
+	mov	#SCRWID, R1
+	mov	#SCRWID*143.+VADDR, R2
+	mov	#SCRWID*144.+VADDR, R3
+20$:	mov	R2, (R4)
+	mov	R3, (R5)
+	sub	R1, R2
+	add	R1, R3
+	add	#4, R5
+	sub	#4, R4
+	sob	R0, 20$
+	return
+
+
+; update item box with sprite, R0-spr num, R1-vaddr
+UpdItem:
+	mov	#177010, R4
+	mov	#177012, R5
+	mov	R1, (R4)		; set vaddr
+	ash	#6., R0			; 64 bytes is sprite size
+	add	#SpritesAddr, R0	; R0 = sprite addr
+	mov	#SCRWID-1, R1		; next vline addition
+	mov	#16., R3
+10$:	inc	R0			; skip mask word
+	inc	R0
+	movb	(R0)+, (R5)		; set color byte
+	inc	(R4)
+	movb	(R0)+, (R5)
+	add	R1, (R4)
+	sob	R3, 10$
+	return

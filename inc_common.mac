@@ -1,0 +1,131 @@
+; //////////////////////////////////////////////////////////////////////////////
+; PPU commands constants
+; //////////////////////////////////////////////////////////////////////////////
+
+CmdClearUpper	  =  1.		; clear upper PPU RAM
+CmdUpdPalette	  =  2.		; set palette, cursor, resolution, luminance
+CmdFixWait	  =  3.		; write PPU empty cycles count to CPU
+CmdRtiToCpu	  =  4.		; write PPU empty INTs count to CPU
+CmdSoundPlay	  =  5.		; start sound (R0 - sound ID)
+CmdMusicPlay	  =  6.		; start music (R0 - tune ID)
+CmdPrintStr	  =  7.		; print single-height string (R0-addr asciiz)
+CmdPrintMsg	  =  8.		; print message in box
+CmdClearVBuffer   =  9.		; clear buffer
+CmdDrawTile       = 10.		; draw 16x16 tile to x,y
+CmdDrawTileVaddr  = 11.		; draw 16x16 tile to vaddr
+CmdDrawTile8Vaddr = 12.		; draw 8x8 tile to vaddr
+CmdBufTile        = 13.		; tile 16x16 to buffer
+CmdBufSprite      = 14.		; buffer 16x16 sprite with mask
+CmdBuf2Scr16      = 15.		; 16x16 buffer tile to screen
+CmdFillScreen     = 16.		; fill half plane 0 with R0
+CmdLinesFromR0    = 17.		; set lines vaddrs starting from R0
+CmdHideScreen     = 18.		; hides screen to the last half-line
+CmdDebugString    = 19.		; show info on bottom of screen
+CmdFadeInScreen   = 20.		; fade in screen
+CmdUpdItem        = 21.		; update item box with sprite
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Drawing 
+; //////////////////////////////////////////////////////////////////////////////
+
+VADDR  = 100000			; lines table first line pointing to
+SCRWID = 40.			; screen width in 8-pix
+VDATA  = SCRWID*300. + VADDR	; start of non-screen data section in vram
+BUFWID = 32.			; framebuffer width in 8-pix
+
+CTILE_SIZE = 32.		; [bytes] tile for plane-0 size
+
+; level field coordinates on screen
+FieldX  = 5.
+FieldY  = 32.
+FieldDX = 16.
+FieldDY = 14.
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Level
+; //////////////////////////////////////////////////////////////////////////////
+
+; these MUST be even
+CLV_MAX_OBJ = 4			; max objects on level
+CLV_MAX_ANI = 4			; max animated tiles on level
+
+CLV_LOCAL_DX = 15.
+CLV_LOCAL_DY = 13.
+
+CGL_LEV_DX = 4
+CGL_LEV_DY = 20.
+
+CGL_DX = CGL_LEV_DX * CLV_LOCAL_DX + 1
+CGL_DY = CGL_LEV_DY * CLV_LOCAL_DY + 1
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Objects 
+; //////////////////////////////////////////////////////////////////////////////
+
+CANI_LEN = 2.			; [bytes] Animation tile size
+COBJ_LEN = 4.			; [bytes] Object vars size
+
+TOBJ_PLAYER	= 1
+TOBJ_ITEM	= 2
+TOBJ_DUMMY	= 3
+TOBJ_TRIG	= 4
+
+ITEM_LIGHT	= 1
+ITEM_SPADE	= 2
+
+TRIG_APPR	= 1		; approach trigger, arg0 = approach max distance by x or y
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Events
+; //////////////////////////////////////////////////////////////////////////////
+
+EVC_CLR		= 1
+EVC_MSG		= 2
+
+EVNT_MSG1	= 1
+EVNT_MSG2	= 2
+
+
+; //////////////////////////////////////////////////////////////////////////////	
+; // CPU<->PPU exchange variables
+; //////////////////////////////////////////////////////////////////////////////
+
+CmdBuffer	= 176000	; CPU<->PPU commands buffer (!) in VRAM (!)
+
+; Addrs are in CPU RAM - to use in PPU make sure they are <ADDR/2>
+
+; Keyboard
+Key8		= 157712	; Key 8
+Key7		= 157714	; key 7
+Key6		= 157716	; key 6
+Key5		= 157720	; key 5
+Key4		= 157722	; key 4
+Key3		= 157724	; key 3
+Key2		= 157726	; key 2
+Key1		= 157730	; key 1
+KeyK2		= 157732	; key K2
+KeyK1		= 157734	; key K1
+KeyStop		= 157736	; key STOP
+KeyUst		= 157740	; key UST
+KeyShift	= 157742	; key SHIFT
+KeyEnter	= 157744	; key ENTER
+KeySpace	= 157746	; key SPACE
+KeyRight	= 157750	; key ->
+KeyLeft		= 157752	; key <-
+KeyDown		= 157754	; key DOWN
+KeyUp		= 157756	; key UP
+KeyCombo	= 157760	; combo was pressed
+KeyAny		= 157762	; key 'anykey'
+KeyCurrent	= 157764	; current key
+
+; Misc
+PpuRtiCount2	= 157766	; interrupts count in PPU
+PpuWaitCount	= 157770	; PPU wait cycles number
+VSyncCount1	= 157772	; vsync 2 counter
+VSyncCount2	= 157774	; vsync 1 counter
+
+PPUState	= 157776	; PPU state
