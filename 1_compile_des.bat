@@ -26,7 +26,7 @@ echo ===========================================================================
 echo Cleanup, Writing to .DSK
 echo ===========================================================================
 del descnt.obj
-move /y DESCNT.LST _descnt.lst >nul
-move /y DESCNT.SAV descnt.sav >nul
 rt11 copy/predelete descnt.sav ld0:descnt.sav
+move /y DESCNT.LST _descnt.lst >nul
+move /y DESCNT.SAV release\descnt.sav >nul
 echo.

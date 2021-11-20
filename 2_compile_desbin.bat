@@ -37,10 +37,6 @@ echo.
 echo ===========================================================================
 echo Compressing, Aligning to 512-bytes size, Updating .DSK
 echo ===========================================================================
-del descpu.dat
-del desppu.dat
-del desr12.dat
-del desr00.dat
 ..\packers\lzsa3.exe _descnt_cpu.dat descpu.dat
 ..\packers\lzsa3.exe _descnt_ppu.dat desppu.dat
 ..\packers\lzsa3.exe _descnt_r12.dat desr12.dat
@@ -63,4 +59,8 @@ rem rt11 copy/predelete desr00.dat ld0:desr00.dat
 ..\..\macro11\rt11dsk.exe a descnt.dsk desr12.dat >NUL
 ..\..\macro11\rt11dsk.exe d descnt.dsk desr00.dat >NUL
 ..\..\macro11\rt11dsk.exe a descnt.dsk desr00.dat >NUL
+move /y descpu.dat release\descpu.dat >NUL
+move /y desppu.dat release\desppu.dat >NUL
+move /y desr12.dat release\desr12.dat >NUL
+move /y desr00.dat release\desr00.dat >NUL
 echo.
