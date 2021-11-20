@@ -565,10 +565,10 @@ InitLevelField:
 ; // Player movements 
 ; //////////////////////////////////////////////////////////////////////////////
 
-ChkBlocksEmpty:	.BYTE	0
-ChkBlocksClimb:	.BYTE	0
-ChkBlocksStand:	.BYTE	0
-ChkBlocksSolid:	.BYTE	0
+ChkBlocksEmpty:		.byte	0
+ChkBlocksClimb:		.byte	0
+ChkBlocksStand:		.byte	0
+ChkBlocksSolid:		.byte	0
 
 ;	0 1 2 3 [4 5 6 7 8 9 10 11] 12 13 14 15
 
@@ -579,7 +579,7 @@ CheckAvail:
 	add	#4., R1			; X+3
 	add	#2., R2			; Y+2
 	call	CheckAvailPoint
-	beq	90$
+	beq	90$			; it's solid
 	add	#7., R1			; X+10
 	call	CheckAvailPoint
 	beq	90$
@@ -591,14 +591,14 @@ CheckAvail:
 	beq	90$
 	clc
 	return
-90$:	inc	ChkBlocksSolid
+90$:	incb	ChkBlocksSolid		; set solid
 	sec
 	return
 
 ; set checked blocks from level point R1,R2 (x,y), return type and flag of passable (Z - not passable)
-; do not modify R1,R2,R5
 ; 0 - nothing, 1 - can climb, 2 - can stand, 3 - solid
 CheckAvailPoint:
+	; (!) do not modify R1,R2,R5
 	mov	R1, R3
 	mov	R2, R4
 	; coords to level addr
@@ -713,20 +713,34 @@ ProcessPlayerDY:
 TransFalling:
 	mov	playerX, R1
 	mov	playerY, R2
+	mov	R2, R5
+	bic	#^B1111111111110000, R5		; R5=Y%16
+	bne	80$				; well.. technically we can walk if Y%16 != 0, but we shouldn't	
 	add	#16., R2			; Y-coord 1px under feet
-	add	#4, R1				; X+3
+	; first point X+4 check
+	add	#4, R1
+	call	CheckAvailPoint			; (!) do no modify R5 there
+	beq	90$				; solid below - can't fall at all
+	; climb/stand below - can't fall either
+	tst	keyDown				; do not check if down key is pressed
+	bne	10$
+	tst	R0				; something is below?
+	bne	90$				; yes - can't fall
+10$:	; second point X+11 check
+	add	#7, R1
 	call	CheckAvailPoint
-	tst	R0				; if any non-solid - can't fall
-	bne	99$
-	add	#7, R1				; X+10
-	call	CheckAvailPoint
+	beq	90$
+	tst	keyDown
+	bne	20$
 	tst	R0	
-	bne	99$
-	clr	playerDY
+	bne	90$
+20$:	; set to 'falling'
+	inc	playerY
+80$:	clr	playerDY
 	mov	#PLSFALLING, playerState	; seems we can fall
 	sec
 	return
-99$:	clc
+90$:	clc
 	return
 
 ; test for up key and if can jump
@@ -741,10 +755,12 @@ TransJumping:
 	return
 
 ; test for up|down keys and if can climb
+; also test for jump down from 'stand' blocks if walking on them
 TransClimbing:
+	; down key pressed
 	tst	KeyDown				; can climb down if ladder is under player
-	beq	10$				; and nothing blocks
-	clrb	ChkBlocksClimb			; clear climbing blocks count
+	beq	50$				; and nothing blocks
+	clr	ChkBlocksEmpty			; clear 'empty' and 'climb' blocks count
 	mov	playerX, R1
 	mov	playerY, R2
 	add	#16., R2
@@ -754,22 +770,20 @@ TransClimbing:
 	add	#7, R1
 	call	CheckAvailPoint
 	beq	99$
-	tstb	ChkBlocksClimb			; if was climbing block under
+	tstb	ChkBlocksClimb			; if was climbing block under	
 	beq	99$
 	; seems we can climb down
 	inc	playerY				; immediate climb 1 pixel down
-	clr	playerDY
-	mov	#PLSCLIMBING, playerState
-	sec	
-	return
-10$:	tst	KeyUp				; can climb up if ladder beneath the player
+	br	90$
+50$:	; up key pressed
+	tst	KeyUp				; can climb up if ladder beneath the player
 	beq	99$
 	mov	playerX, R1
 	mov	playerY, R2
 	call	CheckAvail			; full check (all points)
 	tstb	ChkBlocksClimb
 	beq	99$
-	; seems we can climb up
+90$:	; switch to climbing state
 	clr	playerDY
 	mov	#PLSCLIMBING, playerState
 	sec
@@ -844,9 +858,18 @@ PlayerFallingDY:
 	beq	20$				; solid object - unable to move	
 	bis	R0, R5				; to check both points
 	beq	30$				; nothing under player - continue to move
-	;TODO: stand block
-	;bit	#1, R5				; can't fall if there is 'stand' block
-	;bne	20$
+	; R5 = 1|2 ladder or stand
+	bit	#2, R5				; is it 'stand' block?
+	beq	14$				; no 'stand' block, go check climb
+	; stand block below can't use DY if (Y+15)/16 != (Y+15+DY)/16
+	mov	R2, R3
+	sub	playerDY, R3			; R3=Y+15
+	ash	#-4, R3				; (Y+15)/16
+	ash	#-4, R2				; (Y+16+DY)/16
+	cmp	R2, R3				; can we move by DY?
+	bne	20$				; no, can't
+	br	30$
+14$:	; climb block below
 	cmp	playerDY, #2			; 'climb' blocks are passable with falling 
 	bgt	30$				; if player is moving faster than 2px speed
 20$:	; unable to move further, decrease speed and try again
@@ -1547,8 +1570,8 @@ varAddr3:	.WORD	0
 		;	0  1  2  3  4  5  6  7  8  9
 TilesWeight:	.BYTE	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 0
 		.BYTE	0, 0, 0, 0, 0, 3, 3, 0, 0, 0	; 10
-		.BYTE	0, 3, 3, 3, 3, 1, 1, 0, 0, 0	; 20
-		.BYTE	0, 3, 0, 0, 0, 0, 0, 0, 0, 0	; 30
+		.BYTE	0, 3, 3, 3, 3, 1, 1, 3, 0, 0	; 20
+		.BYTE	0, 0, 0, 0, 2, 0, 0, 0, 0, 0	; 30
 
 EventsTable:
 	.word	0
