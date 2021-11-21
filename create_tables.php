@@ -1,6 +1,7 @@
 <?php
-
-	for ($shift_pos = 6; $shift_pos <= 6; $shift_pos+=2)
+	// sprite shifting tables
+	// (not needed, used ashc)
+	for ($shift_pos = 2; $shift_pos <= 6; $shift_pos+=2)
 	for ($byte=0; $byte<=255; $byte++)
 	{
 		$byte_out_1 = ($byte << $shift_pos) & 0xFF;
@@ -12,7 +13,7 @@
 	$f = fopen("tables.txt", "w");
 	fputs($f, "ShiftTable1:\n");
 	$col = 0;
-	for ($shift_pos = 6; $shift_pos <= 6; $shift_pos+=2)
+	for ($shift_pos = 2; $shift_pos <= 6; $shift_pos+=2)
 	for ($byte=0; $byte<=255; $byte++)
 	{
 		if ($col == 0) fputs($f, "\t.BYTE\t");
@@ -24,7 +25,7 @@
 	
 	fputs($f, "\nShiftTable2:\n");
 	$col = 0;
-	for ($shift_pos = 6; $shift_pos <= 6; $shift_pos+=2)
+	for ($shift_pos = 2; $shift_pos <= 6; $shift_pos+=2)
 	for ($byte=0; $byte<=255; $byte++)
 	{
 		if ($col == 0) fputs($f, "\t.BYTE\t");
@@ -34,6 +35,8 @@
 		$col++;
 	}
 
+	// part of videolines table in PPU
+	//
 	fputs($f, "\nVLinesTable:\n");
 	$vaddr = 0100000;
 	$paddr_start = 01130;

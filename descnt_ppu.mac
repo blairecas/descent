@@ -480,11 +480,13 @@ DebugString:
 	mov	#TxtDebug03+23., R5
 	call	DecToStr
 	; check for real 1801VM2
+	clr	R1
 	mov	(PC), R0
-	nop				; 1801vm2 will execute this twice
-	jmp	@#99$			; 1801vm2 will skip word after jmp command
-	.word   90$			; 1801vm2 will use this addr for jmp
-90$:	mov	#TxtDebug02, R1		; copy 9 bytes of text
+	inc	R1
+	br	10$
+10$:	cmp	R1, #1
+	beq	99$
+	mov	#TxtDebug02, R1		; copy 9 bytes of text
 	mov	#TxtDebug01+35., R2
 	mov	#9., R3
 	movb	(R1)+, (R2)+
