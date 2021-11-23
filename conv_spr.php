@@ -1,5 +1,33 @@
 <?php
 
+$dataOutputCur = 0;
+$dataOutputMax = 0;
+$dataOutputPre = '';
+
+function InitDataOutput ($pre, $max)
+{
+    global $dataOutputCur, $dataOutputMax, $dataOutputPre;
+    $dataOutputCur = 0;
+    $dataOutputMax = $max-1;
+    $dataOutputPre = $pre;
+}
+
+function DataOutput ($f, $s)
+{
+    global $dataOutputCur, $dataOutputMax, $dataOutputPre;
+    if ($dataOutputCur == 0) fputs($f, "\t".$dataOutputPre."\t"); else fputs($f, ", ");
+    fputs($f, $s);
+    if ($dataOutputCur == $dataOutputMax) fputs($f, "\n");
+    $dataOutputCur++; if ($dataOutputCur > $dataOutputMax) $dataOutputCur = 0;
+}
+
+function FinishDataOutput($f)
+{
+    global $dataOutputCur;
+    if ($dataOutputCur != 0) fputs($f, "\n");
+}
+
+
 // MAIN ////////////////////////////////////////////////////////////////////////
 
     // first character:
@@ -31,12 +59,15 @@
 
     $fout_cpu = fopen("./graphics/inc_cpu_sprites.mac", "w");
     $fout_ppu = fopen("./graphics/inc_ppu_sprites.mac", "w");
+
     OutPlane0Bytes($fout_ppu, "Tiles8Addr", $tiles8_arr, true);
     OutPlane0Bytes($fout_ppu, "FontAddr", $font_arr, false/*mask*/);
     OutPlane0Bytes($fout_ppu, "TilesAddr", $tiles_arr, false);
-    OutPlane0Words($fout_ppu, "SpritesAddr", $sprites_arr);
-    OutPlane12DW($fout_cpu, "TilesAddr", $tiles_arr, false);
-    OutPlane12DW($fout_cpu, "SpritesAddr", $sprites_arr, true);
+
+    OutPlane0Words($fout_ppu, "Sprites", $sprites_arr);
+    OutPlane12DW($fout_cpu, "Tiles", $tiles_arr, false);
+    OutPlane12DW($fout_cpu, "Sprites", $sprites_arr, true);
+
     fputs($fout_cpu, "\n");
     fputs($fout_ppu, "\n");
     fclose($fout_cpu);
@@ -173,34 +204,6 @@ function GetSprData ( $img, $sprnum, $type )
 }
 
 
-// 16-pixel width (with mask)
-function OutPlane0Words ($fout, $sname, $arr)
-{
-    global $ppu_bytes;
-    
-    fputs($fout, "\n$sname:\n");
-    for ($number=0; $number<count($arr); $number++)
-    {
-	fputs($fout, '; '.str_pad($number,3,'0',STR_PAD_LEFT)."\n");
-        $cn = 0;
-        $cmax = 7;
-	$lcnt = count($arr[$number]);
-	for ($idx=0; $idx<$lcnt; $idx+=2)
-	{
-            if ($cn == 0) fputs($fout, "\t.WORD\t"); else fputs($fout, ", ");
-	    $bmask1 = ($arr[$number][$idx] >> 24) & 0xFF;
-	    $bmask2 = ($arr[$number][$idx+1] >> 24) & 0xFF;
-            $byte1 = $arr[$number][$idx] & 0xFF;
-	    $byte2 = $arr[$number][$idx+1] & 0xFF;
-            fputs($fout, decoct($bmask2<<8|$bmask1).","); $ppu_bytes+=2;
-            fputs($fout, decoct($byte2<<8|$byte1)); $ppu_bytes+=2;
-            if ($cn == $cmax) fputs($fout, "\n");
-            $cn++; if ($cn > $cmax) $cn = 0;
-        }
-        if ($cn != 0) fputs($fout, "\n");
-    }
-}
-
 // 8-pixel width 
 function OutPlane0Bytes ($fout, $sname, $arr, $with_mask)
 {
@@ -231,72 +234,145 @@ function OutPlane0Bytes ($fout, $sname, $arr, $with_mask)
 }
 
 
-function OutPlane12Words ($fout, $sname, $arr, $with_mask)
+// 16-pixel width PPU output (with mask)
+// variable height 16xDY
+//
+function OutPlane0Words ($fout, $sname, $arr)
 {
-    global $cpu_bytes;
+    global $ppu_bytes;
 
-    fputs($fout, "\n$sname:\n");
+    // get sprites idx-start, offset-start and idx-end
+    $lstart = Array();
+    $lend   = Array();
+    $sdata  = Array();
+    for ($number=0; $number<count($arr); $number++)
+    {
+	for ($idx=0, $line=0; $idx<count($arr[$number]); $idx+=2, $line++)
+	{
+            $m1 = ($arr[$number][$idx] >> 24) & 0xFF;
+            $m2 = ($arr[$number][$idx+1] >> 24) & 0xFF;
+            $wmask = ($m2<<8 | $m1) & 0xFFFF;
+            $byte1 = $arr[$number][$idx] & 0xFF;
+	    $byte2 = $arr[$number][$idx+1] & 0xFF;
+	    $wdata1 = ($byte2 << 8) | $byte1;
+	    $sdata[$number][$line][0] = $wmask;
+	    $sdata[$number][$line][1] = $wdata1;
+	    $was_data = true; if ($wmask == 0 && $wdata1 == 0) $was_data = false;
+	    if ($was_data) {
+		if (!isset($lstart[$number])) $lstart[$number] = $line;
+		$lend[$number] = $line; // same line
+	    }
+	}
+	if (!isset($lstart[$number])) {
+	    $lstart[$number] = 0;
+	    $lend[$number] = 0;
+	}
+    }
+
+    // output sprites data
+    fputs($fout, "\n$sname"."Data:\n");
     for ($number=0; $number<count($arr); $number++)
     {
 	fputs($fout, '; '.str_pad($number,3,'0',STR_PAD_LEFT)."\n");
-        // mask
-        if ($with_mask) {
-            $cn = 0; $cmax = 7;
-            for ($idx=0; $idx<count($arr[$number]); $idx++)
-            {
-                if ($cn == 0) fputs($fout, "\t.BYTE\t"); else fputs($fout, ", ");
-                $bmask = ($arr[$number][$idx] >> 24) & 0xFF;
-                fputs($fout, decoct($bmask)); $cpu_bytes++;
-                if ($cn == $cmax) fputs($fout, "\n");
-                $cn++; if ($cn > $cmax) $cn = 0;
-            }
-            if ($cn != 0) fputs($fout, "\n");
-	}
-
-	$cn = 0; $cmax = 7;
-        for ($idx=0; $idx<count($arr[$number]); $idx++)
+	InitDataOutput('.word', 8);
+        for ($line=$lstart[$number]; $line<=$lend[$number]; $line++)
         {
-            if ($cn == 0) fputs($fout, "\t.WORD\t"); else fputs($fout, ", ");
-            $w = ($arr[$number][$idx] >> 8) & 0xFFFF;
-            fputs($fout, decoct($w)); $cpu_bytes+=2;
-            if ($cn == $cmax) fputs($fout, "\n");
-            $cn++; if ($cn > $cmax) $cn = 0;
+	    DataOutput($fout, decoct($sdata[$number][$line][0])); $ppu_bytes += 2;
+	    DataOutput($fout, decoct($sdata[$number][$line][1])); $ppu_bytes += 2;
         }
-        if ($cn != 0) fputs($fout, "\n");
+	FinishDataOutput($fout);
     }
+
+    // PPU don't need sizes, its controlled from CPU
+    // so - just offsets
+    fputs($fout, "\n$sname"."Addr:\n");
+    InitDataOutput('.word', 10);
+    $offset = 0;
+    for ($number=0, $offset=0; $number<count($arr); $number++) { 
+        $dy = ($lend[$number]-$lstart[$number]) & 0xF; // it's DY-1
+        DataOutput($fout, $sname."Data+".decoct($offset)); $ppu_bytes += 2;
+        $offset += (($dy+1) *4); // 4-bytes for line
+    }
+    FinishDataOutput($fout);
 }
 
 
-// 16-pixel width output (dwords)
+// 16-pixel width CPU output (dwords)
+// sprites with mask are variable height 16xDY
+//
 function OutPlane12DW ($fout, $sname, $arr, $with_mask)
 {
     global $cpu_bytes;
 
-    fputs($fout, "\n$sname:\n");
+    // get sprites idx-start, offset-start and idx-end
+    $lstart = Array();
+    $lend   = Array();
+    $sdata  = Array();
+    for ($number=0; $number<count($arr); $number++)
+    {
+	for ($idx=0, $line=0; $idx<count($arr[$number]); $idx+=2, $line++)
+	{
+            $m1 = ($arr[$number][$idx] >> 24) & 0xFF;
+            $m2 = ($arr[$number][$idx+1] >> 24) & 0xFF;
+            $wmask = ($m2<<8 | $m1) & 0xFFFF;
+	    $w1 = ($arr[$number][$idx+0] >> 8) & 0xFFFF;
+	    $w2 = ($arr[$number][$idx+1] >> 8) & 0xFFFF;
+	    $wdata1 = ($w1 & 0x00FF) | (($w2 & 0x00FF) << 8);
+	    $wdata2 = (($w1 & 0xFF00) >> 8) | ($w2 & 0xFF00);
+	    $sdata[$number][$line][0] = $wmask;
+	    $sdata[$number][$line][1] = $wdata1;
+	    $sdata[$number][$line][2] = $wdata2;
+	    $was_data = true; if ($wmask == 0 && $wdata1 == 0 && $wdata2 == 0) $was_data = false;
+	    if ($was_data || !$with_mask) {
+		if (!isset($lstart[$number])) $lstart[$number] = $line;
+		$lend[$number] = $line; // same line
+	    }
+	}
+	if (!$with_mask) {
+	    $lstart[$number] = 0;
+	    $lend[$number] = 15;
+	}
+	if (!isset($lstart[$number])) {
+	    $lstart[$number] = 0;
+	    $lend[$number] = 0;
+	}
+    }
+
+    // output sprites data
+    fputs($fout, "\n$sname"."Data:\n");
     for ($number=0; $number<count($arr); $number++)
     {
 	fputs($fout, '; '.str_pad($number,3,'0',STR_PAD_LEFT)."\n");
-	$cn = 0; $cmax = 7;
-        for ($idx=0; $idx<count($arr[$number]); $idx+=2)
+	InitDataOutput('.word', 8);
+        for ($line=$lstart[$number]; $line<=$lend[$number]; $line++)
         {
-            if ($cn == 0) fputs($fout, "\t.WORD\t"); else fputs($fout, ", ");
-	    // mask (word)
-	    if ($with_mask) 
-	    {
-                $bmask1 = ($arr[$number][$idx] >> 24) & 0xFF;
-                $bmask2 = ($arr[$number][$idx+1] >> 24) & 0xFF;
-		fputs($fout, decoct($bmask2<<8|$bmask1).","); $cpu_bytes+=2;
-            }
-	    // colors (dword)
-	    $w1 = ($arr[$number][$idx+0] >> 8) & 0xFFFF;
-	    $w2 = ($arr[$number][$idx+1] >> 8) & 0xFFFF;
-	    $word1 = ($w1 & 0x00FF) | (($w2 & 0x00FF) << 8);
-	    $word2 = (($w1 & 0xFF00) >> 8) | ($w2 & 0xFF00);
-            fputs($fout, decoct($word1).","); $cpu_bytes+=2;
-            fputs($fout, decoct($word2)); $cpu_bytes+=2;
-            if ($cn == $cmax) fputs($fout, "\n");
-            $cn++; if ($cn > $cmax) $cn = 0;
+	    if ($with_mask) { DataOutput($fout, decoct($sdata[$number][$line][0])); $cpu_bytes += 2; }
+	    DataOutput($fout, decoct($sdata[$number][$line][1])); $cpu_bytes += 2;
+	    DataOutput($fout, decoct($sdata[$number][$line][2])); $cpu_bytes += 2;
         }
-        if ($cn != 0) fputs($fout, "\n");
+	FinishDataOutput($fout);
+    }
+
+    // output sprites offsets and sizes
+    if ($with_mask)
+    {
+        fputs($fout, "\n$sname"."Addr:\n");
+        InitDataOutput('.word', 10);
+	$offset = 0;
+        for ($number=0, $offset=0; $number<count($arr); $number++) { 
+            $dy = ($lend[$number]-$lstart[$number]) & 0xF; // it's DY-1
+            DataOutput($fout, $sname."Data+".decoct($offset)); $cpu_bytes += 2;
+            $offset += (($dy+1) * 6); // 6-bytes for line
+	}
+        FinishDataOutput($fout);
+        fputs($fout, "\n$sname"."Size:\n");
+        InitDataOutput('.byte', 10);
+        for ($number=0, $offset=0; $number<count($arr); $number++) {
+	    $ystart = $lstart[$number] & 0xF;
+            $dy = ($lend[$number]-$lstart[$number]) & 0xF;
+	    DataOutput($fout, decoct($ystart << 4 | $dy)); $cpu_bytes++;
+	}
+        FinishDataOutput($fout);
+        fputs($fout, "\t.even\n");
     }
 }

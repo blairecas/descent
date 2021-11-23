@@ -260,7 +260,7 @@ BufTile:
 	add	#VBufferSize, R5	; R5=buf2 addr
 	; get tile addr
 	ash	#6., R0			; *64 (32 words)
-	add	#TilesAddr, R0		; R0=tile addr
+	add	#TilesData, R0		; R0=tile addr
 	;
 	mov	#BUFWID-2, R1		; buf addition
 	mov	#4., R3
@@ -327,13 +327,35 @@ Buf2Scr16:
 
 ; 16x16 sprite -> buffer with mask, R0=spr #, R1=x, R2=y
 BufSprite:
-	.ppexe	#CmdBufSprite		; execute same in PPU
-	; get sprite addr
-	mov	R0, R4			; *(32+64) (bytes) mask + colors
-	ash	#6., R0
-	ash	#5., R4
-	add	R4, R0
-	add	#SpritesAddr, R0	; R0 = sprite addr
+	; apply sprite Y-start and get DY
+	clr	R4
+	bisb	SpritesSize(R0), R4	; R4 = [Y-start][sprite DY-1] nibbles
+	mov	R4, R3
+	bic	#^B1111111111110000, R4	; R4 = sprite DY-1
+	inc	R4			; correct to DY
+	ash	#-4, R3			; R3 = Y-start in sprite
+	add	R3, R2			; add Y-start to Y
+; will NOT check for out of framebuffer, do it in main code
+;	bpl	2$
+;	clr	R2
+;	br	4$
+;2$:	mov	#FieldDY*16., R3
+;	sub	R4, R3
+;	cmp	R2, R3
+;	blos	4$
+;	mov	R3, R2
+;4$:	tst	R1
+;	bpl	6$
+;	clr	R1
+;	br	8$
+;6$:	cmp	R1, #FieldDX*16.-16.
+;	blos	8$
+;	mov	#FieldDX*16.-16., R1
+;8$:
+	; execute buf sprite in PPU with updated X,Y,DY
+	asl	R0			; offset in bytes -> words
+	.ppexe	#CmdBufSprite
+	mov	SpritesAddr(R0), R0	; R0 = sprite address
 	; get buffer addr - (Y*32) + (X/8 even)
 	ash	#5., R2			; R2=Y*32
 	add	#VBuffer1, R2		; R2=buffer starting line
@@ -344,18 +366,18 @@ BufSprite:
 	asr	R5			; 14T
 	asl	R5			; 14T faster than 32T bic #1, R5
 	add	R2, R5			; R5 = buf addr
-	; R0=spr addr, R5=buf1 even addr, R1=X
+; plane-1 call, R0=spr addr, R1=X, R5=buf1 even addr, R4=height
 	mov	R0, -(SP)
 	mov	R1, -(SP)
+	mov	R4, -(SP)
 	mov	R5, -(SP)
 	call	BufSprite1
 	mov	(SP)+, R5
+	mov	(SP)+, R4
 	mov	(SP)+, R1
 	mov	(SP)+, R0
 	add	#VBufferSize, R5	
-
-; plane-2 buffer routine, R0=spr addr, R5=buf addr
-	mov	#16., R4
+; plane-2 buffer routine, R0=spr addr, R5=buf2 even addr, R4=height
 	bic	#^B1111111111110000, R1	; X % 16
 	bne	20$
 	; zero shift
@@ -388,10 +410,8 @@ BufSprite:
 	sob	R4, 20$			; 32T|16T
 	; =568T*16
 	return
-
-; plane-1 buffer routine, R0=spr addr, R5=buf addr
+; plane-1 buffer routine, R0=spr addr, R5=buf addr, R4=height
 BufSprite1:
-	mov	#16., R4
 	bic	#^B1111111111110000, R1	; X % 16
 	bne	20$
 	; zero shift

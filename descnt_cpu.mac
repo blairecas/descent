@@ -239,6 +239,7 @@ MainGame:
 	call	ProcItemKeys
 	call	ProcessPlayer
 	call	Acting
+	call	ProcessHits
 	call	ProcessObjects
 	call	ProcessPlayerOut
 	return
@@ -272,32 +273,62 @@ BufActSpade:
 	add	R3, R0
 	movb	spadeActDX(R0), R1
 	movb	spadeActDY(R0), R2
-	mov	playerX, drawX
-	mov	playerY, drawY
-	add	R1, drawX
-	add	R2, drawY
+	; add coords and check boundaries
+	add	playerX, R1
+	bpl	2$
+	clr	R1
+	br	4$
+2$:	cmp	R1, #FieldDX*16.-16.
+	blos	4$
+	mov	#FieldDX*16.-16., R1
+4$:	add	playerY, R2
+	bpl	6$
+	clr	R2
+	br	8$
+6$:	cmp	R2, #FieldDY*16.-16.
+	blos	8$
+	mov	#FieldDY*16.-16., R2
+8$:	; set hitpoint, on #1 animation it hits
+	cmp	R3, #1
+	bne	20$
+	tst	hitpointX		; do not set if not asked to
+	bpl	20$
+	mov	plActingArg1, R0
+	movb	spadeHitDX(R0), R3
+	movb	spadeHitDY(R0), R4
+	add	R1, R3
+	add	R2, R4	
+	mov	R3, hitpointX
+	mov	R4, hitpointY
+20$:	; draw
+	mov	R1, drawX
+	mov	R2, drawY
 	mov	#drawObject, R0
 	call	BufferObject
 	return
+
 spadeSprites:	.byte	20., 21., 22., 23.
 spadeActDX:	.byte	3,5,3,0, 0,0,0,0, -3,-5,-3,0, 0,0,0,0
 spadeActDY:	.byte	1,1,1,0, 6,8.,6,0, 1,1,1,0, -7,-9.,-7,0
+spadeHitDX:	.byte	15., 8., 0., 8.
+spadeHitDY:	.byte	10., 15., 10., 0.
 
 
 ; mark level bits as 'drawed' and draw object sprite in buffer
 ; R0-object addr [TYPE|SUBTYPE, SprID, X, Y]
 BufferObject:
 	mov	4(R0), R1		; X
-	bmi	99$			; <0 - no object
+;	bmi	99$			; <0 - no object
 	mov	6(R0), R2		; Y
 	mov	R1, R3			; save them for later use
 	mov	R2, R4
+	bic	#^B1111111100001111, R3 ; levelX/16*16
+	bic	#^B1111111100001111, R4	; levelY/16*16
 	asr	R3			; convert X,Y to level offset
 	asr	R3
 	asr	R3
 	asr	R3			; levelX
 	mov	R3, R5
-	bic	#^B0000000000001111, R4	; levelY*16
 	add	R4, R5			; level offset
 	asl	R5
 	add	#Level, R5		; level addr -> R5
@@ -1018,6 +1049,10 @@ ProcessPlayerOut:
 99$:	return
 
 
+; //////////////////////////////////////////////////////////////////////////////
+; // Acting
+; //////////////////////////////////////////////////////////////////////////////
+
 ; process player using items
 Acting:
 	tst	plActing			; already using item?
@@ -1056,6 +1091,8 @@ AcStartLight:
 	return
 
 AcStartSpade:
+	; ask to set hit point (hitpointX must be 0 at this point?)
+	mov	#-1, hitpointX
 	; can't use in climbing
 	cmp	playerState, #PLSCLIMBING
 	bne	10$
@@ -1084,38 +1121,37 @@ spadeHitsTableX:	.byte	15.+5, 8., -5, 8.
 spadeHitsTableY:	.byte	10., 15.+5, 10., -5
 
 ActingSpade:
-	mov	plActingArg2, R2
-	inc	R2				; increase animation
-	; at animation #1 - spade hits
-	cmp	R2, #2
-	bne	10$
-	; create hit point
-	mov	plActingArg1, R1		; direction (0->,1,2,3 clockwise)
-	movb	spadeHitsTableY(R1), R0
-	add	playerY, R0
-	mov	R0, hitpointY
-	mov	R0, R5				; start making level offset
+	; advance animation
+	inc	plActingArg2
+	cmp	plActingArg2, #3
+	blt	99$
+	clr	plActing			; stop digging
+99$:	return
+
+
+ProcessHits:
+	; check if hitpoint is set
+	tst	hitpointX
+	ble	99$
+	; hitpoint is set - check level tile
+	mov	hitpointY, R5
 	bic	#^B1111111100001111, R5		; [Y/16]*16
-	movb	spadeHitsTableX(R1), R0
-	add	playerX, R0
-	mov	R0, hitpointX
+	mov	hitpointX, R0
+	bic	#^B1111111100001111, R0		; [X/16]*16
 	ash	#-4, R0
 	add	R0, R5				; R5=offset in level units
 	asl	R5				; R5=offset in words
 	; check if hit level breakable tile
 	add	#Level, R5
 	bit	#^B0000010000000000, (R5)
-	beq	10$
+	beq	90$
 	call	SpadeingTile
-	;
-10$:	cmp	R2, #3			; max animation
-	blt	99$
-	clr	plActing			; stop digging
-	return
-99$:	mov	R2, plActingArg2
-	return
+90$:	; clear hitpoints, used just once
+	clr	hitpointX
+99$:	return
 
-; 'spadeing' ^_^ tile, R5 - addr
+
+; 'spadeing' tile, R5 - addr
 SpadeingTile:
 	tstb	gLevelY				; top level?
 	bne	10$
@@ -1183,50 +1219,52 @@ AddItem:
 UpdateItems:
 	mov	#Items, varAddr		; item 
 	mov	ItemBoxVAddr, varAddr3	; vaddr of item box
-10$:	movb	@varAddr, R0		; get item #
-	bne	30$			; have any item?
-	; clear item box, R0 is already 0
-	mov	varAddr3, R1
-	.ppexe	#CmdDrawTileVaddr	; draw tile #0 = clear
-	mov	#176640, R4
-	mov	#176642, R5
-	mov	varAddr3, (R4)	
-	mov	#16., R3
-	mov	#SCRWID-1, R1
-20$:	clr	(R5)
-	inc	(R4)
-	clr	(R5)
-	add	R1, (R4)
-	sob	R3, 20$
-	br	90$
-30$:	; draw item in item box
-	movb	ItemBaseSpr(R0), R0	; item sprite #
-	bic	#177400, R0		; clear high byte
-	mov	varAddr3, R1
+10$:	; I haven't 'draw' sprite on arbitrary vaddr proc
+	; so - use vbuffers and then copy square
+	clr	R0
+	clr	R1
+	clr	R2
+	call	BufTile
+	; put item in buffer at (0,0)
+	clr	R5
+	bisb	@varAddr, R5
+	beq	20$			; no item
+	clr	R0
+	bisb	ItemBaseSpr(R5), R0	; item sprite #
+	clr	R1
+	clr	R2
+	call	BufSprite
+	; now copy square from vbuffers to screen
+20$:	mov	varAddr3, R1
 	.ppexe	#CmdUpdItem
-	mul	#96., R0		; sprites are 32(mask)+64 bytes
-	add	#SpritesAddr, R1	; sprite addr -> R1
-	mov	#176640, R4
-	mov	#176642, R5
-	mov	R5, R2
-	inc	R2
-	mov	varAddr3, (R4)	
+	call	SetVreg
+	mov	R1, (R4)
+	mov	#VBuffer1, R1
+	mov	#VBuffer2, R2
 	mov	#16., R3
-	mov	#SCRWID-1, R0
-40$:	inc	R1			; skip mask
-	inc	R1
-	movb	(R1)+, (R5)
-	inc	R1
-	movb	(R1), (R2)
+30$:	clr	R0
+	bisb	(R2)+, R0
+	swab	R0
+	bisb	(R1)+, R0
+	mov	R0, (R5)
 	inc	(R4)
-	dec	R1
-	movb	(R1)+, (R5)
-	inc	R1
-	movb	(R1)+, (R2)
-	add	R0, (R4)
-	sob	R3, 40$
+	clr	R0
+	bisb	(R2)+, R0
+	swab	R0
+	bisb	(R1)+, R0
+	mov	R0, (R5)
+	add	#BUFWID-2, R1
+	add	#BUFWID-2, R2
+	add	#SCRWID-1, (R4)
+	sob	R3, 30$
+	; restore vbuffers
+	clr	R0
+	bisb	@#Level, R0
+	clr	R1
+	clr	R2
+	call	BufTile
 	; TODO: draw number of items
-90$:	add	#SCRWID*21., varAddr3
+	add	#SCRWID*21., varAddr3
 	add	#2, varAddr
 	cmp	varAddr, #Items+16.
 	blo	10$
@@ -1641,10 +1679,11 @@ EventsTable:
 
 @include inc_cpu_sprites.mac
 
-Level:		.blkw	FieldDX*FieldDY
-LevelEnd:
 LevelObj:	.blkw	CLV_MAX_OBJ * COBJ_LEN		; level objects
 LevelObjEnd:
+
+Level:		.blkw	FieldDX*FieldDY
+LevelEnd:
 
 VBufferSize = FieldDX*FieldDY*CTILE_SIZE		; one buffer size in bytes = DX * DY * tile16 size of one plane
 VBuffer1:	.blkb	VBufferSize

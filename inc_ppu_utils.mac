@@ -434,8 +434,11 @@ Buf2Scr16:
 	return
 
 
-; 16x16 sprite -> buffer with mask, R0=spr #, R1=x, R2=y
+; 16x16 sprite -> buffer with mask, R0=spr# *2, R1=x, R2=y, R4=dy
 BufSprite:
+	; get sprite addr
+	; asl	R0 - done in CPU already
+	mov	SpritesAddr(R0), R0	; R0 = sprite addr
 	; get buffer addr - (Y*32) + (X/8 even)
 	ash	#5., R2			; Y*32
 	add	#VBuffer0, R2
@@ -446,22 +449,19 @@ BufSprite:
 	asr	R5			; 14T
 	asl	R5			; 14T faster than 32T bic #1, R5
 	add	R2, R5			; R5 = buf addr
-	; get sprite addr
-	ash	#6., R0			; *64 (bytes), sprite with mask
-	add	#SpritesAddr, R0	; R0 = sprite addr
-	mov	#16., R4
+	;
 	bic	#^B1111111111110000, R1	; X % 16
 	bne	20$
-	; zero shift
-	; R0=spr addr, R5=buf addr, R4=height
+; zero shift
+; R0=spr addr, R5=buf addr, R4=height
 	mov	#BUFWID, R1
 10$:	bic	(R0)+, (R5)
 	bis	(R0)+, (R5)
 	add	R1, R5
 	sob	R4, 10$
 	return
-	; non-zero shift
-	; R0=spr addr, R5=buf addr, R4=height
+; non-zero shift
+; R0=spr addr, R5=buf addr, R4=height
 20$:	mov	(R0)+, R3		; 32T mask word
 	clr	R2			; 14T R2:R3 - mask dword
 	ashc	R1, R2			; 92T (for R1=15) R2:R3 << R1
@@ -537,20 +537,13 @@ FadeInScreen:
 	return
 
 
-; update item box with sprite, R0-spr num, R1-vaddr
+; update item box with sprite from vbuffer0 (0,0), R1-vaddr
+; vaddr must be even (!), will use VRAM -> ROM mapping
 UpdItem:
-	mov	#177010, R4
-	mov	#177012, R5
-	mov	R1, (R4)		; set vaddr
-	ash	#6., R0			; 64 bytes is sprite size
-	add	#SpritesAddr, R0	; R0 = sprite addr
-	mov	#SCRWID-1, R1		; next vline addition
+	mov	#VBuffer0, R0
 	mov	#16., R3
-10$:	inc	R0			; skip mask word
-	inc	R0
-	movb	(R0)+, (R5)		; set color byte
-	inc	(R4)
-	movb	(R0)+, (R5)
-	add	R1, (R4)
+10$:	mov	(R0)+, (R1)+
+	add	#BUFWID-2, R0
+	add	#SCRWID-2, R1
 	sob	R3, 10$
 	return
