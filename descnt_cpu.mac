@@ -141,14 +141,14 @@ MainMenu:
 	bic	#^B1111111111111100, PlayerAni
 	tst	PlayerDir		; walking right?
 	bne	22$			; nope - go 22
-	mov	#5., PlayerSpr		; base walk right sprite
+	mov	#2., PlayerSpr		; base walk right sprite
 	add	#2., PlayerX
 	cmp	PlayerX, #158.		; at the right edge?
 	blt	24$
 	mov	#158., PlayerX
 	inc	PlayerDir		; walk left now
 	br	24$
-22$:	mov	#2., PlayerSpr
+22$:	mov	#5., PlayerSpr
 	sub	#2., PlayerX
 	cmp	PlayerX, #64.
 	bgt	24$
@@ -838,10 +838,10 @@ PlayerWalking:
 	call	KeysRightLeft
 	call	ProcessPlayerDX
 	; standing sprites
-	mov	#2, playerSpr
+	mov	#5, playerSpr
 	cmp	playerDir, #PLDRIGHT
 	bne	10$
-	mov	#5, playerSpr
+	mov	#2, playerSpr
 10$:	; testing for movement
 	tst	playerDX
 	beq	30$
@@ -859,10 +859,10 @@ PlayerWalking:
 
 
 JumpFallSprites:
-	mov	#1, playerSpr
+	mov	#6, playerSpr
 	cmp	playerDir, #PLDRIGHT
 	bne	10$
-	mov	#6, playerSpr
+	mov	#1, playerSpr
 10$:	return
 
 
@@ -1171,6 +1171,17 @@ SpadeingTile:
 	clrb	(R4)
 	bis	#^B1000000000000000, (R4)
 20$:	mov	R0, (R5)
+	; change tile in buffer to make a bit of animation
+	; get level X,Y from offset
+	sub	#Level, R5
+	asr	R5
+	mov	R5, R1
+	bic	#^B1111111111110000, R1
+	mov	R5, R2
+	bic	#^B1111111100001111, R2
+	ash	#-4, R2
+	mov	#36., R0
+	call	BufTile
 	return
 
 
@@ -1311,6 +1322,8 @@ BufferObjects:
 	beq	50$
 	cmpb	R1, #TOBJ_DUMMY
 	beq	50$
+	cmpb	R1, #TOBJ_ENEMY
+	beq	50$
 20$:	add	#COBJ_LEN*2, R0
 	cmp	R0, #LevelObjEnd
 	blo	10$
@@ -1323,7 +1336,10 @@ BufferObjects:
 
 ; process level objects routine
 ProcessObjects:
-	mov	#LevelObj, Process000+2
+	bit	#^B01, FrameCount	; every 2nd frame
+	beq	10$
+	return
+10$:	mov	#LevelObj, Process000+2
 Process000:
 	mov	#0, R0			; addr of object struct
 	mov	(R0), R1		; R1=[subtype][type]
@@ -1340,7 +1356,7 @@ Process000:
 	return
 
 ProcessTable:
-	.word	ProcObjNone, ProcObjNone, ProcObjItem, ProcObjDummy, ProcObjTrig
+	.word	ProcObjNone, ProcObjNone, ProcObjItem, ProcObjDummy, ProcObjTrig, ProcObjEnemy
 
 ; nothing to process
 ProcObjNone:
@@ -1419,6 +1435,85 @@ ObjFindByType:
 	; not found
 	mov	#playerObject, R0
 99$:	return
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Enemies 
+; //////////////////////////////////////////////////////////////////////////////
+
+; object structure for enemies
+; [b subtype][b type], [w spr], [w x], [w y]
+; bit-15 in first word (bit-7 in subtype) - direction - 0-right, 1-left
+; X, Y - only low byte used, high bytes are flags
+
+; enemies (spiders, bats etc.)
+; R0=addr of object structure, R1=type*2 (TOBJ_ENEMY*2), R2=subtype
+ProcObjEnemy:
+	mov	R0, R5
+	bic	#^B1111111110000000, R2	; remove direction flag from subtype (why clear high? just in case)
+	asl	R2
+	call	@EnemySubProcTable(R2)
+	return
+
+EnemySubProcTable:
+	.word	ProcSpider1
+
+; === generic spider 1 ===
+; try to move in direction of face (forward)
+; if unable to move - turn around 
+; try to fall down (have weight=2, normal falling)
+; repeat
+; R5 = obj struct addr
+ProcSpider1:
+	; set sprite 
+	mov	(R5), R0
+	clr	R3
+	rol	R0				; get direction bit in C
+	rol	R3				; set direction bit
+	asl	R3
+	add	#24., R3			; get base sprite #
+	mov	FrameCount, R4			; add animation
+	bic	#^B1111111111111101, R4
+	asr	R4
+	bis	R4, R3
+	mov	R3, 2(R5)
+	; Y-movement (falling)
+	mov	6(R5), R2			; R2 = Y
+	cmp	R2, #FieldDY*16.-16.		; test for out of screen
+	bge	10$				; skip falling then
+	mov	4(R5), R1			; R1 = X
+	add	#4, R2				; Y+4
+	call	CheckAvail			; check for avail down
+	bcs	10$				; 
+	add	#4, 6(R5)			; Y=Y+4
+10$:	mov	4(R5), R1
+	mov	6(R5), R2
+	; X-movement
+	bit	#^B1000000000000000, (R5)	; check moving direction
+	bne	50$
+	; move right
+	cmp	R1, #FieldDX*16.-18.		; right screen boundary -2px
+	bge	18$
+	inc	R1
+	inc	R1	
+	call	CheckAvail
+	bcc	20$
+18$:	bis	#^B1000000000000000, (R5)	; change direction to 'left'
+	return
+20$:	add	#2, 4(R5)
+	return
+50$:	; move left
+	cmp	R1, #2				; left screen boundary +2px
+	ble	58$
+	dec	R1
+	dec	R1
+	call	CheckAvail
+	bcc	60$
+58$:	bic	#^B1000000000000000, (R5)
+	return
+60$:	sub	#2, 4(R5)
+	return
+
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -1605,9 +1700,9 @@ PLSJUMPING  = 2
 PLSCLIMBING = 3
 PLSDYING    = 4
 ; player directions
-PLDRIGHT = 1
-PLDLEFT  = 2
-PLDBACK  = 3
+PLDRIGHT = 0
+PLDLEFT  = 1
+PLDBACK  = 2
 
 jumpTableDY:	.byte	-4, -4, -3, -3, -2, -2, -1, -1, 0, 0
 jumpVelocity:	.word	0

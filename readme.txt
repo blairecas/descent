@@ -28,6 +28,7 @@ Utilities needed:
 php.exe     - well, it's PHP 5 (I think 7 will also work) ^_^
 rt11.exe    - PDP-11 emulator for win32, already here with system.dsk
 macro11.exe - http://retrocmp.com/tools/macro-11-on-windows
+              (sysmac.sml is in system.dsk, extract with rt11dsk or rt11)
 lzsa3.exe   - get from https://github.com/imachug/lzsa3/ release
 rt11dsk.exe - get from https://github.com/nzeemin/ukncbtl-utils/ release
               (can use rt11.exe to copy files to .dsk though,  as rt11dsk 
