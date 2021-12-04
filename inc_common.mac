@@ -47,8 +47,8 @@ FieldDY = 14.
 ; // Level
 ; //////////////////////////////////////////////////////////////////////////////
 
-CLV_LOCAL_DX = 15.
-CLV_LOCAL_DY = 13.
+CLV_LOCAL_DX = 15.	; for reference only, can't be changed
+CLV_LOCAL_DY = 13.	; because of heavy using nibbles for level coordinates
 
 CGL_LEV_DX = 4
 CGL_LEV_DY = 20.

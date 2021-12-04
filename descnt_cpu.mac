@@ -107,11 +107,11 @@ MainReset:
 	add	#FieldDX-7*2, R5
 	sob	R3, 10$
 	; prepare menu character walking
-	mov	#64., PlayerX
+	mov	#80., PlayerX
 	mov	#16., PlayerY
 	clr	PlayerDir
 	clr	PlayerAni
-	mov	#5., PlayerSpr
+	mov	#2., PlayerSpr
 	call	RedrawFull
 	; controls text
 	mov	#MenuTbl10, varAddr
@@ -185,7 +185,7 @@ MainPrepare:
 
 	clr	glevelX			; glevelX = 377 - not initialized
 	dec	glevelX			; glevelY = 377
-	movb	#1, glevelNewX		; first level coords
+	clrb	glevelNewX		; first level coords
 	clrb	glevelNewY		;
 	call	InitLevelField		; init level
 
@@ -195,11 +195,11 @@ MainPrepare:
 	clr	(R0)+
 	sob	R3, .-2
 	mov	#PLSWALKING, playerState
-	mov	#122., playerX
+	mov	#200., playerX
 	mov	#048., playerY
-	clr	playerDir
+	inc	playerDir
 	clr	playerAni
-	mov	#2., playerSpr
+	mov	#5., playerSpr
 	clr	playerItemNew
 	call	SelectNewItem
 
@@ -463,7 +463,7 @@ CopyGlobalLocal:
 	bmi	24$			; yes - exit cycle
 	add	R0, R1
 	br	22$
-24$:	asl	R1			; TODO: change to R1=R1*COBJ_LEN
+24$:	asl	R1			; TODO: change to R1=R1*COBJ_LEN?
 	asl	R1			; now object size is 4 bytes
 	; R1 = offset from GlobalObj
 	; R0 = level objects count
@@ -1146,12 +1146,46 @@ SpadeingTile:
 	cmp	R5, #FieldDX*2*5+Level		; 5 top lines on top level can't be digged
 	bhis	10$
 	return
-10$:	mov	(R5), R0
-	bic	#^B0000111111111111, R0		; clear tile
-	bis	#^B1000000000000000, R0		; set as 'need to update'
-	; TODO: modify this tile and tiles around (place grass|dirt)
-20$:	mov	R0, (R5)
-	; change tile in buffer to make a bit of animation
+10$:	bic	#^B0000111111111111, (R5)	; clear tile
+	bis	#^B1000000000000000, (R5)	; set as 'need to update'
+	; modify this tile and tiles around (place grass|dirt)
+	call	DirtifyTile
+	; try to change left tile (if not at leftmost already)
+	mov	R5, R4
+	sub	#Level, R4
+	asr	R4
+	bic	#^B1111111111110000, R4
+	beq	20$
+	dec	R5
+	dec	R5
+	call	DirtifyTile
+	inc	R5
+	inc	R5
+20$:	; try to change right tile (if not at rightmost already)
+	mov	R5, R4
+	sub	#Level, R4
+	asr	R4
+	bic	#^B1111111111110000, R4
+	inc	R4
+	beq	30$
+	inc	R5
+	inc	R5
+	call	DirtifyTile
+	dec	R5
+	dec	R5
+30$:	; try to change upper tile (if not at first line already)
+	cmp	R5, #Level+32.
+	blo	40$
+	sub	#32., R5
+	call	DirtifyTile
+	add	#32., R5
+40$:	; try to change lower tile (if not at bottom line already)
+	cmp	R5, #LevelEnd-32.
+	bhis	50$
+	add	#32., R5
+	call	DirtifyTile
+	sub	#32., R5
+50$:	; change tile in buffer to make a bit of animation
 	; get level X,Y from offset
 	sub	#Level, R5
 	asr	R5
@@ -1163,6 +1197,57 @@ SpadeingTile:
 	mov	#18., R0
 	call	BufTile
 	return
+
+; make grass/dirt on tile depending on adjacent
+; R5 - level addr
+; must set tile # in R0 low byte on return
+; 'empty' means any non-solid objects
+; out-of-screens are always empty 
+DirtifyTile:
+	mov	(R5), R0
+	cmpb	R0, #10.			; changeable tiles are below #10. by design
+	bhis	99$
+	; construct bits combination - 001 right, 010 bottom, 100 left
+	clrb	R0				; result will be in low-byte R0
+	mov	#^B1111111111111100, R2		; bit mask for tile 'weight'
+	mov	R5, R4
+	sub	#Level, R4
+	asr	R4				; R0 = offset in level units
+	; check left side
+	bic	#^B1111111111110000, R4		; zero nibble means we are at leftmost side, level DX is always 16
+	beq	10$				; skip leftmost check
+	mov	-2(R5), R1			; it's safe for (0,0) also, there is an extra word for this
+	swab	R1
+	inc	R1
+	bic	R2, R1
+	bne	10$
+	bis	#^B100, R0			; left is solid
+10$:	; check right side
+	inc	R4				; for check rightmost side
+	beq	20$				; skip rightmost check
+	mov	2(R5), R1			; it's safe for (15,13) also, there is an extra word for this
+	swab	R1
+	inc	R1
+	bic	R2, R1
+	bne	20$
+	bis	#^B001, R0
+20$:	; check bottom 
+	cmp	R5, #LevelEnd-32.		; bottom line of level?
+	bhis	30$				; don't check it
+	mov	32.(R5), R1
+	swab	R1
+	inc	R1
+	bic	R2, R1
+	bne	30$
+	bis	#^B010, R0
+30$:	; make appropriate tile if needed
+	tstb	R0
+	beq	40$
+	inc	R0
+	inc	R0
+40$:	bis	#100000, R0			; set 'need to update' flag
+	mov	R0, (R5)
+99$:	return
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -1692,7 +1777,7 @@ drawY:		.word	0
 playerObject:
 ; --- PLAYER ------------
 playerId:	.word	TOBJ_FRIEND	; player's ID, isn't he friend?
-playerSpr:	.word	5		; default player spr
+playerSpr:	.word	2		; default player spr (walk right)
 playerX:	.word	0
 playerY:	.word	48.
 playerDir:	.word	PLDRIGHT
@@ -1762,8 +1847,10 @@ EventsTable:
 LevelObj:	.blkw	COBJ_LEN * 8.			; level objects (max is 8)
 LevelObjEnd:
 
+		.word	0				; extra word for (-1,0) coord (needed somewhere in checks)
 Level:		.blkw	FieldDX*FieldDY
 LevelEnd:
+		.word	0				; same extra word for rightmost bottom checks
 
 VBufferSize = FieldDX*FieldDY*CTILE_SIZE		; one buffer size in bytes = DX * DY * tile16 size of one plane
 VBuffer1:	.blkb	VBufferSize
