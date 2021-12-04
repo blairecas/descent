@@ -1,0 +1,449 @@
+<html>
+<head>
+<meta charset="UTF-8">
+
+<style>
+* { font-family: Courier, monospace; font-size:11pt; }
+.center { text-align: center; }
+.panel { float: left; margin-right:4px; }
+.panel > div { margin-bottom:4px; }
+.vseparator { border-left:#aaa 2px dotted; }
+.hseparator { border-bottom:#aaa 2px dotted; }
+textarea { width:100%; height:150px; }
+#aid_tex_obj { height: 100px; }
+#aid_img_tiles { width: 340px; }
+#aid_img_sprites { width: 340px; }
+#aid_level_table { border:0; border-collapse: collapse; border-spacing: 0; }
+#aid_level_table td {
+    border:0; padding:0;
+    width:32px; height:32px;
+    background-image: url('../graphics/TTiles.png');
+    background-repeat: no-repeat;
+    background-size: 340px 442px;
+    text-align: center;
+    vertical-align: middle;
+}
+#aid_level_table div { 
+    width:28px; height:28px;
+    background: transparent;
+    background-image: url('../graphics/SSprites.png');
+    background-repeat: no-repeat;
+    background-size: 340px 442px;
+    text-align: center;
+    vertical-align: middle;
+}
+#aid_level_table div.active { border: #fff 2px solid; }
+#aid_level_table div.trigger { border: goldenrod 2px solid; }
+#aid_span_obj { display: inline-block; margin-right:8px; }
+</style>
+
+<script	src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+
+<script type="text/javascript">
+
+    var GlobalLevel  = [];
+    var GlobalObjLen = [];
+    var GlobalObj    = [];
+
+    var levelTable = null;
+    var imgTiles = null;
+
+    var gLevelX = 0;
+    var gLevelY = 0;
+    var levX = 0;
+    var levY = 0;
+    var newlevX = 0;
+    var newlevY = 0;
+    var levidx = 0;
+
+    var CLV_LOCAL_DX = 15, CLV_LOCAL_DY = 13;
+    var CGL_LEV_DX = 4, CGL_LEV_DY = 20;
+    var CGL_DX = CGL_LEV_DX * CLV_LOCAL_DX + 1;
+    var CGL_DY = CGL_LEV_DY * CLV_LOCAL_DY + 1;
+
+    var EVNT_MSG1 = 1;
+
+function _gidx (x, y)
+{
+    return gLevelY*CLV_LOCAL_DY*CGL_DX + gLevelX*CLV_LOCAL_DX + y*CGL_DX + x;
+}
+
+
+function SetLevelBackground (x, y)
+{
+    let tile_id = GlobalLevel[_gidx(x,y)] & 0xFF;
+    let xscr = - (tile_id % 10) * 34 - 2;
+    let yscr = - parseInt(tile_id / 10) * 34 - 2;
+    let td = levelTable.rows[y].cells[x];
+    td.style.backgroundPosition = xscr+"px "+yscr+"px";
+    let dv = td.firstChild;
+    dv.style.backgroundImage = 'none';
+    dv.classList.remove('trigger');
+    UpdateObjects();
+}
+
+
+function UpdateObjects ()
+{
+    // glev objects
+    let gidx = gLevelX + gLevelY*CGL_LEV_DX;
+    let sobj = '';
+    for (let j=0; j<GlobalObjLen[gidx]; j++)
+    {
+	sobj = sobj + GlobalObj[gidx][j].join(',') + "\n";
+	let __type = GlobalObj[gidx][j][0];
+	if (__type == '0') continue;
+        let __coord = parseInt(eval(GlobalObj[gidx][j][3]));
+        let x = __coord % (CLV_LOCAL_DX+1);
+        let y = Math.trunc(__coord / (CLV_LOCAL_DX+1));
+        let td = levelTable.rows[y].cells[x];
+	let dv = td.firstChild;
+	if (__type.toUpperCase().indexOf('TOBJ_TRIG') >= 0) {
+	    dv.classList.add('trigger');
+            continue;
+        }
+        let __i = parseInt(eval(GlobalObj[gidx][j][1]));
+        let xscr = - (__i % 10) * 34 - 2;
+        let yscr = - parseInt(__i / 10) * 34 - 3;
+	dv.style.backgroundImage = "url('../graphics/SSprites.png')";
+        dv.style.backgroundPosition = xscr+"px "+yscr+"px";
+    }
+    $('#aid_tex_obj').val(sobj);
+    $('#aid_span_obj').text(GlobalObjLen[gidx]);
+}
+
+
+function UpdateLevelTable ()
+{
+    // table
+    for (let y=0; y<=CLV_LOCAL_DY; y++)
+    for (let x=0; x<=CLV_LOCAL_DX; x++) SetLevelBackground(x, y);
+    UpdateObjects();
+}
+
+
+function CreateLevelTable ()
+{
+    for (let y=0; y<=CLV_LOCAL_DY; y++) {
+	let tr = document.createElement("tr");
+	for (let x=0; x<=CLV_LOCAL_DX; x++) {
+            let td = document.createElement("td");
+	    let div = document.createElement("div");
+	    td.appendChild(div);
+	    tr.appendChild(td);
+	}
+	levelTable.tBodies[0].appendChild(tr);
+    }
+}
+
+
+function UpdateLevelPoint (nx, ny)
+{
+    levelTable.rows[levY].cells[levX].firstChild.classList.remove("active");
+    levX = nx; levY = ny;
+    levelTable.rows[levY].cells[levX].firstChild.classList.add("active");
+    levidx = _gidx(levX, levY);
+    $('#aid_div_ltile').find('span').html('<b>'+GlobalLevel[levidx]+'</b>');
+    $('#aid_div_gcoord').find('span').text('('+gLevelX+','+gLevelY+')');
+    $('#aid_div_lcoord').find('span').html('(x,y):('+levX+','+levY+') ['+(levY*(CLV_LOCAL_DX+1)+levX)+'] <b>'+levY+'*'+(CLV_LOCAL_DX+1)+'+'+levX+'</b>');
+}
+
+
+function WindowKeyDown (e)
+{
+    if (document.activeElement && document.activeElement.nodeName && document.activeElement.nodeName == 'TEXTAREA') return;
+    // selected level point movement
+    if (e.code == 'ArrowRight' || e.code == 'KeyD') {
+	if (levX < CLV_LOCAL_DX) UpdateLevelPoint(levX+1, levY); 
+	else if (gLevelX < (CGL_LEV_DX-1)) { gLevelX++; UpdateLevelTable(); UpdateLevelPoint(0, levY); }
+    }
+    if (e.code == 'ArrowLeft' || e.code == 'KeyA') {
+	if (levX > 0) UpdateLevelPoint(levX-1, levY);
+	else if (gLevelX > 0) { gLevelX--; UpdateLevelTable(); UpdateLevelPoint(CLV_LOCAL_DX, levY); }
+    }
+    if (e.code == 'ArrowDown' || e.code == 'KeyS') {
+	if (levY < CLV_LOCAL_DY) UpdateLevelPoint(levX, levY+1);
+	else if (gLevelY < (CGL_LEV_DY-1)) { gLevelY++; UpdateLevelTable(); UpdateLevelPoint(levX, 0); }
+    }
+    if (e.code == 'ArrowUp' || e.code == 'KeyW') {
+	if (levY > 0) UpdateLevelPoint(levX, levY-1);
+	else if (gLevelY > 0) { gLevelY--; UpdateLevelTable(); UpdateLevelPoint(levX, CLV_LOCAL_DY); }
+    }
+    // tile ID increase/decrease
+    if (e.code == 'Equal') {
+	if (GlobalLevel[levidx] < 128) GlobalLevel[levidx]++;
+	SetLevelBackground(levX, levY);
+    }
+    if (e.code == 'Minus') {
+	if (GlobalLevel[levidx] > 0) GlobalLevel[levidx]--;
+	SetLevelBackground(levX, levY);
+    }
+}
+
+
+function LevelTableMouseDown (e)
+{
+    let rect = levelTable.getBoundingClientRect();
+    let x = e.clientX - rect.left;
+    let y = e.clientY - rect.top;
+    UpdateLevelPoint(parseInt(x/32), parseInt(y/32));
+}
+
+
+function TilesImageMouseDown (e)
+{
+    let rect = imgTiles.getBoundingClientRect();
+    let x = e.clientX - rect.left;
+    let y = e.clientY - rect.top;
+    let i = parseInt(y/34) * 10 + parseInt(x/34);
+    GlobalLevel[levidx] = i;
+    SetLevelBackground(levX, levY);    
+}
+
+
+function FillWithTile (yst, i)
+{
+    for (let y=yst; y<=CLV_LOCAL_DY; y++)
+    for (let x=0; x<=CLV_LOCAL_DX; x++) GlobalLevel[_gidx(x,y)] = i;
+}
+
+
+function FillLevelBelow ()
+{
+    let i = GlobalLevel[levidx];
+    if (!confirm("Fill level below with tile #"+i)) return;
+    FillWithTile(levY, i);
+    UpdateLevelTable();
+}
+
+
+function FillLevelRandom (d)
+{
+    let i = GlobalLevel[levidx];
+    if (!confirm("Fill level below with random("+d+") around tile #"+i)) return;
+    for (let y=levY; y<=CLV_LOCAL_DY; y++)
+    for (let x=0; x<=CLV_LOCAL_DX; x++) {
+	let v = i + parseInt(d*Math.random());
+        GlobalLevel[_gidx(x,y)] = v;
+    }
+    UpdateLevelTable();
+}
+
+
+function CopyToText ()
+{
+    let arr = [];
+    let st = '';
+    // global level
+    st = st + "GlobalLevel:\n";
+    for (let y=0; y<CGL_DY; y++)
+    {
+        arr[y] = [];
+        for (let x=0; x<CGL_DX; x++) arr[y][x] = GlobalLevel[y*CGL_DX+x] & 0xFF;
+        st = st + "\t.word\t" + arr[y].join(',') + "\n";
+    }
+    // objects lengths for local levels
+    arr = [];
+    for (let i=0; i<CGL_LEV_DY*CGL_LEV_DX; i++) arr.push(GlobalObjLen[i]);
+    st = st + "\nGlobalObjLen:\n\t.byte\t" + arr.join(',') + "\n";
+    // objects
+    st = st + "\nGlobalObj:\n";
+    for (let i=0; i<CGL_LEV_DY*CGL_LEV_DX; i++) {
+        let k = GlobalObjLen[i];
+	st = st + "\t.byte\t";
+	arr = [];
+	for (let j=0; j<k; j++) {
+	    arr.push(GlobalObj[i][j][0]);
+	    arr.push(GlobalObj[i][j][1]);
+	    arr.push(GlobalObj[i][j][2]);
+	    arr.push(GlobalObj[i][j][3]);
+	}
+	st = st + arr.join(",") + "\n";
+    }
+    // 
+    $('#aid_tex_area').val(st);
+}
+
+
+function ClearGLevel()
+{
+    let idx = 0;
+    for (let y=0; y<CGL_DY; y++)
+    for (let x=0; x<CGL_DX; x++, idx++) GlobalLevel[idx] = 0;
+}
+
+
+
+    var copyIdx=0;
+    var copyIdxI=0, copyIdxJ=0, copyIdxK=0;
+
+function CopyFromText ()
+{
+    if (!confirm('Load level from text?')) return;
+    ClearGLevel();
+    let larr = $('#aid_tex_area').val().split(/\n/);
+    let usewith = 0;
+    let error = "";
+    for (let k=0; (k<larr.length) && (error.length == 0); k++)
+    {
+        let sline = larr[k].trim();
+	if (sline.length == 0) continue;
+	if (sline.toLowerCase() == 'globallevel:')  { usewith=1; copyIdx=0; continue; }
+	if (sline.toLowerCase() == 'globalobjlen:') { usewith=2; copyIdx=0; continue; }
+	if (sline.toLowerCase() == 'globalobj:')    { usewith=3; copyIdxI=copyIdxJ=copyIdxK=0; InitObjArray(); continue; }
+	switch (usewith)
+	{
+	    case 1: error = CopyFromText1(sline, GlobalLevel); break;
+	    case 2: error = CopyFromText1(sline, GlobalObjLen); break;
+	    case 3: error = CopyFromText2(sline, GlobalObj); break;
+	    default: error = "Text data without label!";
+	}
+    }
+    if (error.length == 0 && copyIdxI != CGL_LEV_DX*CGL_LEV_DY) error = "Wrong number of bytes in OBJ labels";
+    if (error.length > 0) alert(error);
+    UpdateLevelTable();
+}
+
+
+function CopyFromText1 (sline, arrto)
+{
+    let arr = sline.split(/[^\d]+/).filter((a) => a);
+    for (let k=0; k<arr.length; k++, copyIdx++) arrto[copyIdx] = parseInt(arr[k]) & 0xFF;
+    return '';
+}
+
+
+function CopyFromText2 (sline, arrto)
+{
+    if (sline.indexOf('.byte') != 0) return ".byte not found in the beginning of GlobalObj string";
+    sline = sline.substr(5).trim();
+    if (sline.length == 0) return "string for GlobalObj is too short";
+    let arr = sline.split(/,/);
+    for (let k=0; k<arr.length; k++) {        
+        arrto[copyIdxI][copyIdxJ][copyIdxK] = arr[k].trim();
+	copyIdxK++;
+	if (copyIdxK >= 4) { 
+	    copyIdxK=0; 
+	    copyIdxJ++;
+	    if (copyIdxJ >= GlobalObjLen[copyIdxI]) {
+		copyIdxJ = 0;
+		copyIdxI++;
+	    }
+	}
+    }
+    return '';
+}
+
+
+function ClearTextField ()
+{
+    if (!confirm('Sure to clear text area?')) return;
+    $('#aid_tex_area').val('');
+}
+
+
+function SetGlevObj ()
+{
+    let gidx = gLevelX + gLevelY*CGL_LEV_DX;
+    let larr = $('#aid_tex_obj').val().split(/\n/).filter((a) => a);
+    let sarr = [];
+    for (let i=0; i<larr.length; i++) {
+	larr[i] = larr[i].trim();	
+	if (larr[i].length < 7) { alert('Objects string is too short (<7 chars)'); return; }
+        sarr.push(larr[i]);
+    }
+    let len = sarr.length;
+    GlobalObjLen[gidx] = len;
+    GlobalObj[gidx] = [];
+    for (let i=0; i<len; i++) {
+        let arr = sarr[i].split(/,/).filter((a) => a);
+	GlobalObj[gidx][i] = arr;
+    }
+    UpdateLevelTable();
+}
+
+
+function InitObjArray ()
+{
+    GlobalObj = [];
+    for (let i=0; i<CGL_LEV_DY*CGL_LEV_DX; i++) 
+    {
+        GlobalObj[i] = [];
+	for (let j=0; j<GlobalObjLen[i]; j++) {
+	    GlobalObj[i][j] = [];
+	    for (let k=0; k<4; k++) GlobalObj[i][j][k] = '0';
+	}
+    }
+}
+
+
+function InitArrays ()
+{
+    ClearGLevel();
+    GlobalObjLen = [];
+    for (let i=0; i<CGL_LEV_DY*CGL_LEV_DX; i++) GlobalObjLen.push(4);
+    InitObjArray();
+}
+
+
+</script>
+
+</head>
+
+<!-- /// BODY /////////////////////////////////////////////////////-->
+<body>
+
+<div class="panel">
+    <div class="center">Level (wasd)</div>
+    <div><table id="aid_level_table"><tbody></tbody></table></div>
+    <div id="aid_div_gcoord">gLevel <span></span></div>
+    <div id="aid_div_lcoord">Coord <span></span></div>
+    <div id="aid_div_ltile">Tile: <span></span></div>
+    <div class="hseparator"></div>
+    <div><textarea id="aid_tex_obj"></textarea></div>
+    <div><span>Objects: </span><span id="aid_span_obj"></span><input type="button" value="Set" onclick="javascript:SetGlevObj();" /></div>
+    <div class="hseparator"></div>
+    <div style="background-color:lightgrey;">Current Level</div>
+    <div class="hseparator"></div>
+    <div>Fill below with current tile: <input type="button" value="Current" onclick="javascript:FillLevelBelow();" /></div>
+    <div>Fill below with random(2): <input type="button" value="Random(2)" onclick="javascript:FillLevelRandom(2);" /></div>
+    <div class="hseparator"></div>
+    <div style="background-color:lightgrey;">Global data</div>
+    <div class="hseparator"></div>
+    <div>
+	<input type="button" value="▼ Get ▼" onclick="javascript:CopyToText();" />
+        <input type="button" value="▲ Put ▲" onclick="javascript:CopyFromText();" />
+    </div>
+    <div><textarea id="aid_tex_area"></textarea></div>
+    <div><input type="button" value="Clear" onclick="javascript:ClearTextField();" /></div>
+    <div></div>
+</div>
+<div class="panel vseparator" style="height:100%;"></div>
+<div class="panel">
+    <div class="center">Tiles (click)</div>
+    <img id="aid_img_tiles" src="../graphics/TTiles.png" />
+    <div class="hseparator"></div>
+    <div class="center">Sprites (just for info)</div>
+    <img id="aid_img_sprites" src="../graphics/SSprites.png" />
+</div>
+<div style="clear:both;"></div>
+
+<script type="text/javascript">
+
+$(window).load(function () 
+{
+    levelTable = document.getElementById('aid_level_table');
+    imgTiles = document.getElementById('aid_img_tiles');
+    InitArrays();
+    CreateLevelTable();
+    UpdateLevelTable();
+    UpdateLevelPoint(levX, levY);
+    window.addEventListener("keydown", WindowKeyDown);
+    levelTable.addEventListener("mousedown", LevelTableMouseDown);
+    imgTiles.addEventListener("mousedown", TilesImageMouseDown);
+});
+
+</script>
+
+</body>
+</html>

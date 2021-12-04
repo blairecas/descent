@@ -73,9 +73,9 @@ MainCycleTable:
 
 
 ; Menu Tiles - X, Y, Id1, Id2, Id3 ... 255. then again till Id=0
-MenuTbl00:	.byte	00., 08., 09., 08., 10., 08., 00.
-		.byte	01., 02., 03., 04., 05., 06., 07.
-		.byte	00., 12., 11., 12., 12., 11., 00.
+MenuTbl00:	.byte	00., 04., 30., 04., 31., 04., 00.
+		.byte	121., 122., 123., 124., 125., 126., 127.
+		.byte	00., 44., 43., 44., 43., 44., 00.
 ; Menu Texts - X, Y, Id, 1|2x ...
 MenuTbl10:	.byte	013., 110., 00.,	013., 120., 01.,	013., 130., 02.
 		.byte	013., 145., 03.,	013., 155., 04.,	013., 165., 05.
@@ -318,7 +318,6 @@ spadeHitDY:	.byte	10., 15., 10., 0.
 ; R0-object addr [TYPE|SUBTYPE, SprID, X, Y]
 BufferObject:
 	mov	4(R0), R1		; X
-;	bmi	99$			; <0 - no object
 	mov	6(R0), R2		; Y
 	mov	R1, R3			; save them for later use
 	mov	R2, R4
@@ -345,6 +344,7 @@ BufferObject:
 	bne	20$
 	bis	#100000, 34.(R5)
 20$:	mov	2(R0), R0		; sprite ID, X,Y already in R1,R2
+	bic	#^B1111111100000000, R0	; some objects have arg #1 in high byte
 	call	BufSprite
 99$:	return
 
@@ -355,20 +355,7 @@ DrawChanged:
 	mov	#CLV_LOCAL_DY, varY	; traverse backwards
 10$:	mov	#CLV_LOCAL_DX, varX	;
 20$:	mov	-(R5), R0		; decrease addr and get level unit
-	bit	#^B0001000000000000, R0	; is it animated?
-	beq	30$
-	; animated tile - add animation
-	mov	FrameCount, R1
-	bit	#3, R1			; every 4th frame
-	bne	30$
-	asr	R1
-	asr	R1			; animation number
-	add	R5, R1			; add X for some difference in animations
-	bic	#^B1111111111111100, R1	; only 2 bits for animations
-	bic	#3, R0			; reset animated tile #
-	bis	R1, R0			; add animation
-	bis	#100000, R0		; TODO: this is not optimal (!!!)
-30$:	; changed buffer
+	; changed buffer
 	bit	#140000, R0		; check current+previous bits
 	beq	50$
 	; draw buffer to screen
@@ -443,6 +430,7 @@ ClearLevel:
 	mov	#LevelEnd-Level/2, R3
 	clr	(R0)+
 	sob	R3, .-2
+ClearLevelObjects:
 	mov	#LevelObj, R0
 	mov	#LevelObjEnd-LevelObj/2, R3
 	clr	(R0)+
@@ -465,31 +453,54 @@ CopyGlobalLocal:
 	add	#CGL_DX-FieldDX, (R4)
 	sob	R3, 10$
 	; copy level objects
-	call	gCoords2R0
-	mov	#CLV_MAX_OBJ * COBJ_LEN, R3
-	mul	R3, R0
+	call	ClearLevelObjects
+	; summ GlobalObjLen for this level index
+	call	gCoords2R3		; R3 = global level index
+	mov	#GlobalObjLen-200000, GetA12
+	clr	R1
+22$:	call	GetB12			; R0 = level objects count
+	dec	R3			; are we at needed level?
+	bmi	24$			; yes - exit cycle
+	add	R0, R1
+	br	22$
+24$:	asl	R1			; TODO: change to R1=R1*COBJ_LEN
+	asl	R1			; now object size is 4 bytes
+	; R1 = offset from GlobalObj
+	; R0 = level objects count
 	add	#GlobalObj-200000, R1
-	sec
-	ror	R1
-	mov	R1, (R4)		; R1 = vram # for objects
-	mov	#LevelObj, R2		; dest addr
-	mov	#CLV_MAX_OBJ, R3
-30$:	mov	(R5), (R2)+		; obj type & subtype
-	inc	(R4)
-	mov	(R5), R0		; arg0 & coords
-	inc	(R4)
-	clr	(R2)			; put arg 0
-	movb	R0, (R2)+		;
-	inc	R2			;
-	clrb	R0			; get coords
-	swab	R0			; R0 = coords
+	mov	R1, GetA12		; GetA12 = vram addr relative to 200000
+	mov	R0, R3			; R3 = level objects count
+	mov	#LevelObj, R2		; R2 = dest addr
+	; copy objects cycle
+30$:	call	GetB12			; R0(low byte) = object type (3-bits) | subtype (5-bits)
+	; convert to word [subtype | type]
+	asl	R0
+	asl	R0
+	asl	R0
+	asrb	R0
+	asrb	R0
+	asrb	R0
+	bic	#^B1111100011100000, R0
+	swab	R0
+	mov	R0, (R2)+		; store [type | subtype] at object word 1
+	call	GetB12			; R0 = argument #0 (spr#)
+	clr	R1
+	bisb	R0, R1
+	call	GetB12			; R0 = argument #1
+	swab	R0
+	clrb	R0
+	bis	R0, R1			; R1 = [arg #1 | arg #0] word
+	mov	R1, (R2)+		; store at object word 2
+	call	GetB12			; R0 = coords
+	bic	#^B1111111100000000, R0		
 	ash	#4, R0			; convert X to pixels
-	movb	R0, (R2)+		; put X
-	inc	R2
+	clr	R1
+	bisb	R0, R1
+	mov	R1, (R2)+		; put X
 	clrb	R0
 	swab	R0			; R0=Y
 	ash	#4, R0			; convert Y to pixels
-	mov	R0, (R2)+		; put Y (high byte already 0)
+	mov	R0, (R2)+		; put Y
 	sob	R3, 30$	
 	return
 
@@ -509,39 +520,16 @@ CopyLocalGlobal:
 	add	#CGL_DX-FieldDX, (R4)
 	sob	R3, 10$
 	; copy level objects
-	call	gCoords2R0
-	mov	#CLV_MAX_OBJ * COBJ_LEN, R3
-	mul	R3, R0
-	add	#GlobalObj-200000, R1
-	sec
-	ror	R1
-	mov	R1, (R4)
-	mov	#LevelObj, R2
-	mov	#CLV_MAX_OBJ, R3
-30$:	mov	(R2)+, (R5)		; object type & subtype
-	inc	(R4)
-	mov	(R2)+, R0		; arg0 (spr #)
-	mov	(R2)+, R1		; X-pixels
-	ash	#-4, R1			; X/16
-	swab	R1
-	clrb	R1
-	bis	R1, R0			; put X part to R0	
-	mov	(R2)+, R1		; Y-pixels
-	bic	#^B1111111100001111, R1	; align to 16-pix
-	swab	R1	
-	bis	R1, R0			; R0=[coords][arg0]
-	mov	R0, (R5)		; put it to vram
-	inc	(R4)
-	sob	R3, 30$
+	; TODO:
 	return
 
 
 ; global level coords into index -> R0
-gCoords2R0:
-	movb	glevelY, R0
-	asl	R0
-	asl	R0
-	bisb	glevelX, R0
+gCoords2R3:
+	movb	glevelY, R3
+	asl	R3
+	asl	R3
+	bisb	glevelX, R3
 	return
 
 
@@ -570,7 +558,7 @@ InitTilesWeight:
 	mov	R0, (R4)
 	mov	#CGL_DY*CGL_DX, R3
 10$:	mov	(R5), R0
-	bic	#^B1110111100000000, R0
+	bic	#^B1111111100000000, R0
 	clr	R1
 	bisb	TilesWeight(R0), R1
 	swab	R1
@@ -1159,17 +1147,9 @@ SpadeingTile:
 	bhis	10$
 	return
 10$:	mov	(R5), R0
-	bic	#^B0000011111111111, R0		; clear tile
+	bic	#^B0000111111111111, R0		; clear tile
 	bis	#^B1000000000000000, R0		; set as 'need to update'
-	; some tiles above need to be cleared also
-	cmp	R5, #FieldDX*2+Level		; on 1st row?
-	blo	20$				; if so - do not check above
-	mov	R5, R4
-	sub	#FieldDX*2, R4
-	cmpb	(R4), #8.
-	bne	20$
-	clrb	(R4)
-	bis	#^B1000000000000000, (R4)
+	; TODO: modify this tile and tiles around (place grass|dirt)
 20$:	mov	R0, (R5)
 	; change tile in buffer to make a bit of animation
 	; get level X,Y from offset
@@ -1180,7 +1160,7 @@ SpadeingTile:
 	mov	R5, R2
 	bic	#^B1111111100001111, R2
 	ash	#-4, R2
-	mov	#36., R0
+	mov	#18., R0
 	call	BufTile
 	return
 
@@ -1320,7 +1300,7 @@ BufferObjects:
 	beq	20$
 	cmpb	R1, #TOBJ_ITEM
 	beq	50$
-	cmpb	R1, #TOBJ_DUMMY
+	cmpb	R1, #TOBJ_FRIEND
 	beq	50$
 	cmpb	R1, #TOBJ_ENEMY
 	beq	50$
@@ -1342,7 +1322,7 @@ ProcessObjects:
 10$:	mov	#LevelObj, Process000+2
 Process000:
 	mov	#0, R0			; addr of object struct
-	mov	(R0), R1		; R1=[subtype][type]
+	mov	(R0), R1		; R1=[type][subtype]
 	beq	20$			; have object?
 	mov	R1, R2
 	clrb	R2
@@ -1356,11 +1336,7 @@ Process000:
 	return
 
 ProcessTable:
-	.word	ProcObjNone, ProcObjNone, ProcObjItem, ProcObjDummy, ProcObjTrig, ProcObjEnemy
-
-; nothing to process
-ProcObjNone:
-	return
+	.word	ProcObjItem, ProcObjFriend, ProcObjEnemy, ProcObjTrig
 
 ; process object item - set sprite (TODO: need to set just once?) and check for collisions with player
 ; R0=addr of obj, R2=subtype=item #
@@ -1396,8 +1372,8 @@ ProcObjItem:
 120$:	clc
 	return
 
-; dummy object
-ProcObjDummy:
+; friendly object
+ProcObjFriend:
 	return
 
 ; trigger object
@@ -1418,7 +1394,8 @@ ProcObjTrig:
 	cmp	R5, #12.		; TODO: check against variable distance
 	ble	50$
 	return
-50$:	mov	2(R0), R1		; event #
+50$:	clr	R1
+	bisb	2(R0), R1		; R1 = arg #0	
 	call	RunEvent
 	return
 
@@ -1442,15 +1419,13 @@ ObjFindByType:
 ; //////////////////////////////////////////////////////////////////////////////
 
 ; object structure for enemies
-; [b subtype][b type], [w spr], [w x], [w y]
-; bit-15 in first word (bit-7 in subtype) - direction - 0-right, 1-left
+; [b subtype][b type], [b arg#1][b spr], [w x], [w y]
 ; X, Y - only low byte used, high bytes are flags
 
 ; enemies (spiders, bats etc.)
 ; R0=addr of object structure, R1=type*2 (TOBJ_ENEMY*2), R2=subtype
 ProcObjEnemy:
 	mov	R0, R5
-	bic	#^B1111111110000000, R2	; remove direction flag from subtype (why clear high? just in case)
 	asl	R2
 	call	@EnemySubProcTable(R2)
 	return
@@ -1466,7 +1441,7 @@ EnemySubProcTable:
 ; R5 = obj struct addr
 ProcSpider1:
 	; set sprite 
-	mov	(R5), R0
+	mov	2(R5), R0			; arg#1 | spr#
 	clr	R3
 	rol	R0				; get direction bit in C
 	rol	R3				; set direction bit
@@ -1476,7 +1451,7 @@ ProcSpider1:
 	bic	#^B1111111111111101, R4
 	asr	R4
 	bis	R4, R3
-	mov	R3, 2(R5)
+	movb	R3, 2(R5)
 	; Y-movement (falling)
 	mov	6(R5), R2			; R2 = Y
 	cmp	R2, #FieldDY*16.-16.		; test for out of screen
@@ -1489,7 +1464,7 @@ ProcSpider1:
 10$:	mov	4(R5), R1
 	mov	6(R5), R2
 	; X-movement
-	bit	#^B1000000000000000, (R5)	; check moving direction
+	bit	#^B1000000000000000, 2(R5)	; check moving direction
 	bne	50$
 	; move right
 	cmp	R1, #FieldDX*16.-18.		; right screen boundary -2px
@@ -1498,7 +1473,7 @@ ProcSpider1:
 	inc	R1	
 	call	CheckAvail
 	bcc	20$
-18$:	bis	#^B1000000000000000, (R5)	; change direction to 'left'
+18$:	bis	#^B1000000000000000, 2(R5)	; change direction to 'left'
 	return
 20$:	add	#2, 4(R5)
 	return
@@ -1509,7 +1484,7 @@ ProcSpider1:
 	dec	R1
 	call	CheckAvail
 	bcc	60$
-58$:	bic	#^B1000000000000000, (R5)
+58$:	bic	#^B1000000000000000, 2(R5)
 	return
 60$:	sub	#2, 4(R5)
 	return
@@ -1577,7 +1552,7 @@ SetVreg:
 	mov	#176642, R5
 	return
 
-; get byte -> R1 from vaddr and advance it
+; get byte -> R0 from vaddr and advance it
 GetB12:	mov	(PC)+, R0
 GetA12:	.word	0			; vram addr rel to 200000
 	inc	GetA12
@@ -1716,7 +1691,7 @@ drawY:		.word	0
 
 playerObject:
 ; --- PLAYER ------------
-playerId:	.word	TOBJ_PLAYER	; player's ID, must be #1
+playerId:	.word	TOBJ_FRIEND	; player's ID, isn't he friend?
 playerSpr:	.word	5		; default player spr
 playerX:	.word	0
 playerY:	.word	48.
@@ -1754,18 +1729,28 @@ varAddr:	.WORD	0
 varAddr2:	.WORD	0
 varAddr3:	.WORD	0
 
-		; bits: [7 6][5 4][3 2][1 0]
+		; bits: 7 6 5 4 [3 2] [1 0]
 		; 7 - 'current frame' draw flag, 6 - 'previous frame'
-		; 5 - darken tile, 4 - animated tile
-		; 3 - not used
-		; 2 - breakable tile
+		; 5 - darken tile
+		; 4 - hazardous
+		; [3,2] - breakable tile power
 		; [1,0] 0 - passable/any, 1 - ladder type, 2 - box type, 3 - solid
 
 		;	0  1  2  3  4  5  6  7  8  9
 TilesWeight:	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 0
-		.byte	0, 0, 0, 0, 0, 7, 3, 0, 0, 0	; 10
-		.byte	0, 7, 7, 7, 7, 1, 1, 3, 0, 0	; 20
-		.byte	0, 0, 0, 0, 2, 0, 0, 0, 0, 0	; 30
+		.byte	7, 7, 7, 7, 0, 0, 0, 0, 0, 0	; 10
+		.byte	3, 0, 0, 0, 0, 3, 0, 3, 3, 0	; 20
+		.byte	0, 0, 0, 0, 0, 0, 2, 0, 1, 1	; 30
+		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 40
+		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 50
+		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 60
+		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 70
+		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 80
+		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 90
+		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 100
+		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 110
+		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 120
+		
 
 EventsTable:
 	.word	0
@@ -1774,7 +1759,7 @@ EventsTable:
 
 @include inc_cpu_sprites.mac
 
-LevelObj:	.blkw	CLV_MAX_OBJ * COBJ_LEN		; level objects
+LevelObj:	.blkw	COBJ_LEN * 8.			; level objects (max is 8)
 LevelObjEnd:
 
 Level:		.blkw	FieldDX*FieldDY
@@ -1799,7 +1784,7 @@ END:
 @include inc_levels.mac
 
 EventMsg1:
-	.byte	EVC_CLR,   EVC_MSG,9.,TOBJ_DUMMY,0,   0
+	.byte	EVC_CLR,   EVC_MSG,9.,TOBJ_FRIEND,0,   0
 EventMsg2:
 	.byte	EVC_CLR,   EVC_MSG,10.,TOBJ_ITEM,ITEM_SPADE,    0
 

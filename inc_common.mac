@@ -47,10 +47,6 @@ FieldDY = 14.
 ; // Level
 ; //////////////////////////////////////////////////////////////////////////////
 
-; these MUST be even
-CLV_MAX_OBJ = 4			; max objects on level
-CLV_MAX_ANI = 4			; max animated tiles on level
-
 CLV_LOCAL_DX = 15.
 CLV_LOCAL_DY = 13.
 
@@ -65,18 +61,19 @@ CGL_DY = CGL_LEV_DY * CLV_LOCAL_DY + 1
 ; // Objects 
 ; //////////////////////////////////////////////////////////////////////////////
 
-CANI_LEN = 2.			; [bytes] Animation tile size
-COBJ_LEN = 4.			; [bytes] Object vars size
+COBJ_LEN = 4.			; [bytes] Object vars size (DO NOT CHANGE IT)
 
-TOBJ_PLAYER	= 1
-TOBJ_ITEM	= 2
-TOBJ_DUMMY	= 3
-TOBJ_TRIG	= 4
-TOBJ_ENEMY	= 5
+; (!) change tables in obj processing if changing here (!)
+TOBJ_ITEM	= 0
+TOBJ_FRIEND	= 1
+TOBJ_ENEMY	= 2
+TOBJ_TRIG	= 3
 
+; (!) change tables in obj processing if changing here (!)
 TSUB_BOSS	= 0
 TSUB_SPIDER1	= 0
 
+; (!) change table in item processing if changing here (!)
 ITEM_LIGHT	= 1
 ITEM_SPADE	= 2
 

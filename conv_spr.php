@@ -308,7 +308,8 @@ function OutPlane12DW ($fout, $sname, $arr, $with_mask)
     $lstart = Array();
     $lend   = Array();
     $sdata  = Array();
-    for ($number=0; $number<count($arr); $number++)
+    $maxspr = count($arr)<128 ? count($arr) : 128;
+    for ($number=0; $number<$maxspr; $number++)
     {
 	for ($idx=0, $line=0; $idx<count($arr[$number]); $idx+=2, $line++)
 	{
@@ -340,7 +341,7 @@ function OutPlane12DW ($fout, $sname, $arr, $with_mask)
 
     // output sprites data
     fputs($fout, "\n$sname"."Data:\n");
-    for ($number=0; $number<count($arr); $number++)
+    for ($number=0; $number<$maxspr; $number++)
     {
 	fputs($fout, '; '.str_pad($number,3,'0',STR_PAD_LEFT)."\n");
 	InitDataOutput('.word', 8);
@@ -359,7 +360,7 @@ function OutPlane12DW ($fout, $sname, $arr, $with_mask)
         fputs($fout, "\n$sname"."Addr:\n");
         InitDataOutput('.word', 10);
 	$offset = 0;
-        for ($number=0, $offset=0; $number<count($arr); $number++) { 
+        for ($number=0, $offset=0; $number<$maxspr; $number++) { 
             $dy = ($lend[$number]-$lstart[$number]) & 0xF; // it's DY-1
             DataOutput($fout, $sname."Data+".decoct($offset)); $cpu_bytes += 2;
             $offset += (($dy+1) * 6); // 6-bytes for line
@@ -367,7 +368,7 @@ function OutPlane12DW ($fout, $sname, $arr, $with_mask)
         FinishDataOutput($fout);
         fputs($fout, "\n$sname"."Size:\n");
         InitDataOutput('.byte', 10);
-        for ($number=0, $offset=0; $number<count($arr); $number++) {
+        for ($number=0, $offset=0; $number<$maxspr; $number++) {
 	    $ystart = $lstart[$number] & 0xF;
             $dy = ($lend[$number]-$lstart[$number]) & 0xF;
 	    DataOutput($fout, decoct($ystart << 4 | $dy)); $cpu_bytes++;
