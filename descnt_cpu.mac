@@ -43,6 +43,7 @@
 	mov	#VSync, @#100		; vsync interrupt
 	mtps	#0
 
+
 ; //////////////////////////////////////////////////////////////////////////////
 ; // MAIN
 ; //////////////////////////////////////////////////////////////////////////////
@@ -768,6 +769,8 @@ TransJumping:
 	beq	99$
 	mov	#PLSJUMPING, playerState
 	clr	jumpVelocity
+	mov	#1, R0
+	.ppexe	#CmdSoundPlay
 	sec
 	return
 99$:	clc
@@ -1198,6 +1201,8 @@ SpadeingTile:
 	ash	#-4, R2
 	mov	#18., R0
 	call	BufTile
+	mov	#2, R0
+	.ppexe	#CmdSoundPlay
 	return
 
 ; make grass/dirt on tile depending on adjacent
@@ -1442,6 +1447,8 @@ ProcObjItem:
 	mov	R2, R1
 	call	AddItem
 	call	UpdateItems
+	mov	#3, R0
+	.ppexe	#CmdSoundPlay
 99$:	return
 ; compare coordinates to be inside
 100$:

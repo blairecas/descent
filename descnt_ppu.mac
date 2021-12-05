@@ -188,7 +188,7 @@ SNDADR:	.word	0
 ; music list addrs
 MUSTAB:	.word	0, MUS001
 ; sound list addrs
-SNDTAB:	.word	0, SND001
+SNDTAB:	.word	0, SND001, SND002, SND003
 
 .radix 10
 
@@ -207,22 +207,77 @@ NOTPAD:	.word	1000
 
 .radix 8
 
+SndType:	.word	0
+
+SndTCnt:	.word	0
+SndGCnt:	.word	0
+
+SndLLo:		.word	0
+SndLHi:		.word	0
+SndLCnt:	.word	0
+
+SndLDl:		.word	0
+SndLDh:		.word	0
+SndLDCnt:	.word	0
+
 ; 06: start sound, R0 - sound ID in SNDTAB list
 SNDSTA:	mtps	#600
 	call	PPTINI
 	asl	R0
 	mov	SNDTAB(R0), R0
 	beq	99$
-	mov	(R0)+, R1
-	beq	99$
-	mov	R0, SNDADR
-	mov	R1, @#177712		; load counter
+	mov	(R0)+, SndType		; type of sound effect
+	beq	99$			; none - exit
+	mov	(R0)+, SndTCnt		; total counter
+	mov	(R0)+, SndGCnt		; local counter
+	mov	(R0)+, SndLDCnt		; local counter addition
+	mov	SndGCnt, SndLCnt	; (restore local counter)
+	mov	(R0)+, SndLLo		; low level duration
+	mov	(R0)+, SndLDl		; low level duration addition
+	mov	(R0)+, SndLHi		; high level duration
+	mov	(R0)+, SndLDh		; high level duration addition
+	mov	R0, SNDADR		; store next effect addr
+	mov	#SndIntLo, @#304	; set sound int to low signal
+	mov	#1, @#177712		; timer counter to minimum
 	tst	@#177714
 	tst	@#177714
-	mov	#SNDINT, @#304		; set sound int
 	bis	#^B01000001, @#177710	; allow int, start, timer = 2mks, 500000 ticks per second
 99$:	mtps	#0
 	return
+
+; PP timer interrupts for sounds
+SndIntLo:
+	bic	#200, @#177716
+	mov	#SndIntHi, @#304	; set next interrupt to high-level version
+	; cycle without changes to low|high durations
+	decb	SndLCnt+1
+	bpl	90$
+	; change durations of low|high
+	add	SndLDl, SndLLo		; additions to low|high durations
+	add	SndLDh, SndLHi		;
+	add	SndLDCnt, SndGCnt	; addition to local cycles count
+	mov	SndGCnt, SndLCnt	; restore local cycles count
+	; end of effect?
+	dec	SndTCnt
+	bpl	90$
+	clr	@#177710		; stop timer
+	tst	@#177714
+	tst	@#177714
+	rti
+90$:	movb	SndLLo+1, @#92$+2	; only high-byte used
+92$:	mov	#0, @#177712
+	tst	@#177714
+	tst	@#177714
+	rti
+SndIntHi:
+	bis	#200, @#177716
+	mov	#SndIntLo, @#304
+	movb	SndLHi+1, @#92$+2
+92$:	mov	#0, @#177712
+	tst	@#177714
+	tst	@#177714
+	rti
+
 
 ; 07: start music, R0 - music ID in MUSTAB list
 MUSSTA:	mtps	#600			; stop interrupts
@@ -280,24 +335,6 @@ MUSPRO:	tst	MUSCUR			; current note addr
 	clr	MUSCUR			; music is stopped
 99$:	mtps	#0
 	return
-
-; PP timer interrupt (for pulse-width modulation)
-SNDINT:	mov	R0, -(SP)
-	mov	#200, R0
-	xor	R0, @#177716
-	mov	@SNDADR, R0
-	beq	90$
-	mov	R0, @#177712
-	add	#2, SNDADR
-	tst	@#177714
-	tst	@#177714
-	mov	(SP)+, R0
-	rti
-90$:	clr	@#177710		; stop timer and ints
-	tst	@#177714
-	tst	@#177714
-	mov	(SP)+, R0
-	rti
 
 MusFrontHi:	.word	0
 MusFrontLo:	.word	0
@@ -634,14 +671,16 @@ MUS001:
 
 SND_TONE = 1
 ; TYPE: SND_TONE
-; ARGS: TCNT = total repeats count (reset values every cycle)
-;       LCNT = local repeats count (use additions every cycle)
-;       LN (fixed point) = both fronts [______/'''''''] length
-;       LD (fixed point) = addition to LN 
-;	DP (fixed point) = % of first front length
-;       addition to DP
-SND001:	.word	SND_TONE, 1000, 50, 400, -1, 256
-	.word	0
+; ARGS: TCNT  = total repeats count (use additions every cycle)
+;       LCNT  = local repeats count
+;	LDCNT = local repeats addition
+;       Lo = low signal [______/'''''''] length
+;       Dl = addition to Lo
+;	Hi = high signal length
+;       Dh = addition to Hi
+SND001:	.word	SND_TONE, 30, 1*256, 0, 250*256, -06*256,  250*256, -06*256
+SND002:	.word	SND_TONE, 5, 1*256, 0, 20*256, +02*256,  200*256, -50*256
+SND003:	.word	SND_TONE, 4, 50*256, -6*256, 80*256, 40*256, 70*256, 40*256
 
 
 .radix 8
