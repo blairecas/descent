@@ -335,23 +335,23 @@ BufSprite:
 	inc	R4			; correct to DY
 	ash	#-4, R3			; R3 = Y-start in sprite
 	add	R3, R2			; add Y-start to Y
-; will NOT check for out of framebuffer, do it in main code
-;	bpl	2$
-;	clr	R2
-;	br	4$
-;2$:	mov	#FieldDY*16., R3
-;	sub	R4, R3
-;	cmp	R2, R3
-;	blos	4$
-;	mov	R3, R2
-;4$:	tst	R1
-;	bpl	6$
-;	clr	R1
-;	br	8$
-;6$:	cmp	R1, #FieldDX*16.-16.
-;	blos	8$
-;	mov	#FieldDX*16.-16., R1
-;8$:
+; TODO: must  NOT check 'out of framebuffer' here, do it in main code
+	bpl	2$
+	clr	R2
+	br	4$
+2$:	mov	#FieldDY*16., R3
+	sub	R4, R3
+	cmp	R2, R3
+	blos	4$
+	mov	R3, R2
+4$:	tst	R1
+	bpl	6$
+	clr	R1
+	br	8$
+6$:	cmp	R1, #FieldDX*16.-16.
+	blos	8$
+	mov	#FieldDX*16.-16., R1
+8$:
 	; execute buf sprite in PPU with updated X,Y,DY
 	asl	R0			; offset in bytes -> words
 	.ppexe	#CmdBufSprite

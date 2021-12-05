@@ -821,7 +821,9 @@ PlayerWalking:
 	call	TransJumping
 	bcs	99$
 	call	TransFalling
-	bcs	99$
+	; it's better to continue movement even if falling already
+	; so here will be no 'bcs 99$'
+	;
 	; set playerDX from keys and process it
 	call	KeysRightLeft
 	call	ProcessPlayerDX

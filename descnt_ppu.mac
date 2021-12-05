@@ -183,7 +183,6 @@ REQRCN:	mov	#<PpuRtiCount2/2>, @#177010
 ; //////////////////////////////////////////////////////////////////////////////
 
 MUSCUR:	.word	0 
-MUSADR:	.word	0
 SNDADR:	.word	0
 
 ; music list addrs
@@ -220,7 +219,6 @@ SNDSTA:	mtps	#600
 	mov	R1, @#177712		; load counter
 	tst	@#177714
 	tst	@#177714
-	tst	@#177714
 	mov	#SNDINT, @#304		; set sound int
 	bis	#^B01000001, @#177710	; allow int, start, timer = 2mks, 500000 ticks per second
 99$:	mtps	#0
@@ -242,7 +240,6 @@ MUSSTA:	mtps	#600			; stop interrupts
 	mov	R0, MUSCUR		; first note addr
 	tst	@#177714
 	tst	@#177714
-	tst	@#177714
 	mov	#MUSIN0, @#304		; set music interrupt
 	bis	#^B01000001, @#177710	; allow int, start, timer = 2mks, 500000 ticks per second
 	mtps	#0
@@ -258,24 +255,28 @@ MUSPRO:	tst	MUSCUR			; current note addr
 	return
 2$:	mov	#<VSyncCount2/2>, @#177010
 	clr	@#177014
-	;	
+	; process new note
 	mtps	#600			; stop interrupts
 	inc	MUSCUR			; advance music note
 	movb	@MUSCUR, R1		; note #
 	beq	20$			; empty ID - stop playing
 	bmi	10$			; empty note
 	asl	R1
-	mov	NOTPAD(R1), @#177712	; play it
-	tst	@#177714
-	tst	@#177714
-	tst	@#177714
+	mov	NOTPAD(R1), R1		; note fronts delays initial
+	mov	R1, MusFrontHi
+	mov	R1, MusFrontLo
+	mov	R1, @#177712		; set music interrupt timer
+	tst	@#177714		; why TWO times? I don't know 
+	tst	@#177714		; but it needed for some reason
 	mov	#200, MUSIN0+2		; set #200 in bis/bic
 	mov	#200, MUSIN1+2		; in case we cleared it
 	br	99$
-10$:	clr	MUSIN0+2		; clear #200 in bis/bic
+10$:	; stop ticking beeper
+	clr	MUSIN0+2		; clear #200 in bis/bic
 	clr	MUSIN1+2		; so it will not tick beeper
 	br	99$
-20$:	call	PPTINI			; init PP timer
+20$:	; stop playing
+	call	PPTINI			; init PP timer
 	clr	MUSCUR			; music is stopped
 99$:	mtps	#0
 	return
@@ -298,14 +299,21 @@ SNDINT:	mov	R0, -(SP)
 	mov	(SP)+, R0
 	rti
 
+MusFrontHi:	.word	0
+MusFrontLo:	.word	0
+
 ; PP timer interrupts (for tones)
-MUSIN0:	bic	#200, @#177716
-	mov	#MUSIN1, @#304
-	tst	@#177714
-	tst	@#177714
+MUSIN0:	bic	#200, @#177716		; low front
+	mov	#MUSIN1, @#304		; set next interrupt to high-front version
+	add	#2, MusFrontLo		; change duty
+	mov	MusFrontLo, @#177712	; set new timer as duty changed
+	tst	@#177714		; TWO times is important I think
+	tst	@#177714		;
 	rti
-MUSIN1:	bis	#200, @#177716
+MUSIN1:	bis	#200, @#177716		; same as above just for high front
 	mov	#MUSIN0, @#304
+	sub	#2, MusFrontHi
+	mov	MusFrontHi, @#177712
 	tst	@#177714
 	tst	@#177714
 	rti		
@@ -572,76 +580,67 @@ MUS001:
 	.byte	13, 20, -1
 	.byte	13, 20, -1
 
-	.byte	25, -1, -1
-	.byte	25, -1, -1
+	.byte	25, 13, -1
+	.byte	25, 13, -1
 
-	.byte	25, -1, -1
-	.byte	25, -1, -1
+	.byte	25, 15, -1
+	.byte	25, 15, -1
 
-	.byte	25, -1, -1
-	.byte	25, -1, -1
+	.byte	25, 17, -1
+	.byte	25, 17, -1
 
-	.byte	25, -1, -1
-	.byte	25, -1, -1
+	.byte	25, 18, -1
+	.byte	25, 18, -1
 
-	.byte	18, -1, -1
-	.byte	18, -1, -1
+	.byte	18, 13, -1
+	.byte	18, 13, -1
 
-	.byte	18, -1, -1
-	.byte	18, -1, -1
+	.byte	18, 11, -1
+	.byte	18, 11, -1
 
-	.byte	18, -1, -1
-	.byte	18, -1, -1
+	.byte	18, 09, -1
+	.byte	18, 09, -1
 
-	.byte	16, -1, -1
-	.byte	16, -1, -1
+	.byte	16, 08, -1
+	.byte	16, 08, -1
 
-	.byte	20, -1, -1
-	.byte	20, -1, -1
+	.byte	20, 08, -1
+	.byte	20, 08, -1
 
-	.byte	20, -1, -1
-	.byte	20, -1, -1
+	.byte	20, 13, -1
+	.byte	20, 13, -1
 
-	.byte	20, -1, -1
-	.byte	20, -1, -1
+	.byte	20, 16, -1
+	.byte	20, 16, -1
 
-	.byte	22, -1, -1
-	.byte	22, -1, -1
+	.byte	22, 14, -1
+	.byte	22, 14, -1
 
-	.byte	15, -1, -1
-	.byte	15, -1, -1
+	.byte	15, 12, -1
+	.byte	15, 12, -1
 
-	.byte	15, -1, -1
-	.byte	15, -1, -1
+	.byte	15, 11, -1
+	.byte	15, 11, -1
 
-	.byte	13, -1, -1
-	.byte	13, -1, -1
+	.byte	13, 10, -1
+	.byte	13, 10, -1
 
-	.byte	12, -1, -1
-	.byte	12, -1, -1
+	.byte	12, 15, 20
+	.byte	12, 15, 20
+
+	.byte	0
+	.even
 
 
-;	.BYTE	01, 10, 13
-;	.BYTE	01, 10, 13
-;	.BYTE	03, 09, 12
-;	.BYTE	03, 09, 12
-
-;	.BYTE	01, 05, 10
-;	.BYTE	01, 05, 10
-;	.BYTE	03, 09, 12
-;	.BYTE	03, 09, 12
-
-;	.BYTE	01, 10, 13
-;	.BYTE	01, 10, 13
-;	.BYTE	01, 10, 13
-;	.BYTE	01, 10, 13
-		
-	.BYTE	0
-	.EVEN
-
-; boom
-SND001:	.word	859, 506, 511, 507, 1527, 510, 508, 509, 509, 1526, 510, 1017, 510, 2033, 1021
-	.word	1015, 1529, 2002, 495, 491, 1973, 494, 984, 495, 984, 988, 968, 480, 475, 1909, 1431
+SND_TONE = 1
+; TYPE: SND_TONE
+; ARGS: TCNT = total repeats count (reset values every cycle)
+;       LCNT = local repeats count (use additions every cycle)
+;       LN (fixed point) = both fronts [______/'''''''] length
+;       LD (fixed point) = addition to LN 
+;	DP (fixed point) = % of first front length
+;       addition to DP
+SND001:	.word	SND_TONE, 1000, 50, 400, -1, 256
 	.word	0
 
 
