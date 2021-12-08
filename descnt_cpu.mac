@@ -93,8 +93,6 @@ MainReset:
 	clr	R0
 	.ppexe	#CmdFillScreen		; clear screen plane-0
 	call	ClearScreen		; clear screen planes-1,2
-	; TODO: unpack global level
-	call	InitTilesWeight
 	; put logo to buffer
 	call	ClearVBuffer
 	call	ClearLevel
@@ -172,14 +170,29 @@ MainMenu:
 MainPrepare:
 	; prepare screen 
 	.ppexe	#CmdHideScreen		; hide anything going on screen
+	; stage text output
 	mov	#8., R0
 	mov	#14., R1
 	mov	#288., R2
 	.ppexe	#CmdPrintStr
-	mov	#177777, R0
-	.ppexe	#CmdFillScreen		; fill screen plane 0
+	; unpack level & objects data from PPU vram
+	mov	#GlobalLevel-200000, R0
+	mov	#GlobalObj-200000, R1
+	.ppexe	#CmdUnpackLevels
+	; while PPU is unpacking - prepare screen background in CPU
 	call	ClearScreen		; clear screen planes 1,2
 	call	ScreenBackground	; fill with ////
+	; TODO: some lenghty operations can be done here
+	; wait for unpacking to finish 
+	call	PpuWait
+	; leve is unpacked but it's with dirty high-bytes
+
+	; fill screen plane 0
+	mov	#177777, R0
+	.ppexe	#CmdFillScreen
+	; init tiles weights while PPU is filling plane 0
+	call	InitTilesWeight		; finish init tiles
+
 	call	DrawFieldBorder		; prepare game borders & item boxes
 	call	ClearItems
 	call	UpdateItems		; draw player items
@@ -455,23 +468,10 @@ CopyGlobalLocal:
 	sob	R3, 10$
 	; copy level objects
 	call	ClearLevelObjects
-	; summ GlobalObjLen for this level index
-	call	gCoords2R3		; R3 = global level index
-	mov	#GlobalObjLen-200000, GetA12
-	clr	R1
-22$:	call	GetB12			; R0 = level objects count
-	dec	R3			; are we at needed level?
-	bmi	24$			; yes - exit cycle
-	add	R0, R1
-	br	22$
-24$:	asl	R1			; TODO: change to R1=R1*COBJ_LEN?
-	asl	R1			; now object size is 4 bytes
-	; R1 = offset from GlobalObj
-	; R0 = level objects count
-	add	#GlobalObj-200000, R1
+	call	PrepareCopyObjects
 	mov	R1, GetA12		; GetA12 = vram addr relative to 200000
-	mov	R0, R3			; R3 = level objects count
-	mov	#LevelObj, R2		; R2 = dest addr
+	; R3 = obj count
+	; R2 = #LevelObj
 	; copy objects cycle
 30$:	call	GetB12			; R0(low byte) = object type (3-bits) | subtype (5-bits)
 	; convert to word [subtype | type]
@@ -521,7 +521,51 @@ CopyLocalGlobal:
 	add	#CGL_DX-FieldDX, (R4)
 	sob	R3, 10$
 	; copy level objects
-	; TODO:
+	call	PrepareCopyObjects
+	mov	R1, PutA12		; PutA12 = vram addr relative to 200000
+	mov	R2, R5			; R5 = #LevelObj
+	; R3 = count
+	; copy objects cycle
+30$:	movb	(R5)+, R1		; type
+	ash	#5, R1
+	bisb	(R5)+, R1		; subtype
+	call	PutB12			; (!) trashes R2
+	movb	(R5)+, R1		; arg #0
+	call	PutB12			; put arg #0
+	movb	(R5)+, R1		; arg #1
+	call	PutB12			; put arg #1
+	mov	(R5)+, R1		; X-coord
+	add	#8., R1			; adjust to center by X
+	ash	#-4, R1			; convert to X-tile
+	bic	#^B1111111111110000, R1	; clear unused bits
+	mov	(R5)+, R0		; Y-coord
+	add	#8., R0			; adjust to center by Y
+	bic	#^B1111111100001111, R0	; convert to Y-tile and *16
+	bis	R0, R1
+	call	PutB12			; put level-unit coords
+	sob	R3, 30$	
+	return
+
+
+; set registers for global <-> local objects copy
+; sets: R1 - GlobalObj for level (relative), R2 - LevelObj, R3 - objects count
+PrepareCopyObjects:
+	; summ GlobalObjLen for this level index
+	call	gCoords2R3		; R3 = global level index
+	mov	#GlobalObjLen-200000, GetA12
+	clr	R1
+22$:	call	GetB12			; R0 = level objects count
+	dec	R3			; are we at needed level?
+	bmi	24$			; yes - exit cycle
+	add	R0, R1
+	br	22$
+24$:	asl	R1			; TODO: change to R1=R1*COBJ_LEN?
+	asl	R1			; now object size is 4 bytes
+	; R1 = offset from GlobalObj
+	; R0 = level objects count
+	add	#GlobalObj-200000, R1
+	mov	R0, R3			; R3 = level objects count
+	mov	#LevelObj, R2		; R2 = dest addr
 	return
 
 
@@ -548,8 +592,7 @@ gCoordsLVram:
 	ror	R2			; R2 = vram #
 	mov	R2, (R4)
 	return
-
-
+	
 ; update global tiles weights
 InitTilesWeight:
 	call	SetVreg
@@ -769,8 +812,6 @@ TransJumping:
 	beq	99$
 	mov	#PLSJUMPING, playerState
 	clr	jumpVelocity
-	mov	#1, R0
-	.ppexe	#CmdSoundPlay
 	sec
 	return
 99$:	clc
@@ -919,8 +960,11 @@ PlayerFalling:
 	
 
 PlayerJumpingDY:
+	clr	@#80$				; clear sound start checks
 	mov	jumpVelocity, R0
-	inc	jumpVelocity
+	bne	10$				; sound start check #1
+	inc	@#80$				; if R0=0 - it's starting of jump
+10$:	inc	jumpVelocity	
 	movb	jumpTableDY(R0), R0
 	mov	R0, playerDY
 	beq	90$
@@ -930,10 +974,15 @@ PlayerJumpingDY:
 	call	CheckAvail
 	bcs	90$
 	add	playerDY, playerY
+	tst	(PC)+				; sound start check #2
+80$:	.word	0
+	beq	99$
+	mov	#SND_JUMP, R0
+	.ppexe	#CmdSoundPlay
 	return
 90$:	clr	playerDY
 	mov	#PLSFALLING, playerState
-	return
+99$:	return
 	
 
 ; jumping
@@ -1201,7 +1250,7 @@ SpadeingTile:
 	ash	#-4, R2
 	mov	#18., R0
 	call	BufTile
-	mov	#2, R0
+	mov	#SND_SPADEING, R0
 	.ppexe	#CmdSoundPlay
 	return
 
@@ -1447,7 +1496,7 @@ ProcObjItem:
 	mov	R2, R1
 	call	AddItem
 	call	UpdateItems
-	mov	#3, R0
+	mov	#SND_ADDITEM, R0
 	.ppexe	#CmdSoundPlay
 99$:	return
 ; compare coordinates to be inside
@@ -1659,7 +1708,22 @@ GetR12:	sec
 10$:	mov	R0, @#176640
 	movb	@#176643, R0
 	return
-	
+
+; put R1 -> byte to dest vaddr and advance it
+; (!) trashes R2
+PutB12:	mov	(PC)+, R2
+PutA12:	.word	0			; vram addr rel to 200000
+	inc	PutA12
+	sec
+	ror	R2
+	bcs	10$
+	mov	R2, @#176640
+	movb	R1, @#176642
+	return
+10$:	mov	R2, @#176640
+	movb	R1, @#176643
+	return
+
 ; vsync wait cycle
 VSyncWait:
 	inc	CpuWaitCount0		; empty cycles counter

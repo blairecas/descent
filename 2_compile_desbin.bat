@@ -21,6 +21,7 @@ echo.
 echo ===========================================================================
 echo Compiling DESCNT_PPU.MAC
 echo ===========================================================================
+..\..\php5\php.exe -c ..\..\php5\ -f conv_level.php
 ..\..\php5\php.exe -c ..\..\php5\ -f preprocess.php descnt_ppu.mac
 if %ERRORLEVEL% NEQ 0 ( exit /b )
 ..\..\macro11\macro11.exe -ysl 32 -yus -m ..\..\macro11\sysmac.sml -l _descnt_ppu.lst _descnt_ppu.mac

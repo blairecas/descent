@@ -116,6 +116,7 @@ CommandsTable:
 	.word	DebugString		; 19. show info on bottom of screen
 	.word	FadeInScreen		; 20. screen fade in, R0=1..144.
 	.word	UpdItem			; 21. update item box with sprite
+	.word	UnpackLevels		; 22. unpack levels data PPU vram -> CPU vram
 	
 	
 ; //////////////////////////////////////////////////////////////////////////////
@@ -207,65 +208,76 @@ NOTPAD:	.word	1000
 
 .radix 8
 
-SndType:	.word	0
+SndType:	.word	0		; sound type
+SndTCnt:	.word	0		; total cycles count (use additions every cycle)
+SndLCnt:	.word	0		; local cycles count
+SndLDCnt:	.word	0		; local cycles addition
+SndLLo:		.word	0		; low level length (fixed point, high byte used)
+SndLDl:		.word	0		; low level length addition
+SndLHi:		.word	0		; high level length
+SndLDh:		.word	0		; high level length addition
+SndIntLCnt:	.word	0
 
-SndTCnt:	.word	0
-SndGCnt:	.word	0
 
-SndLLo:		.word	0
-SndLHi:		.word	0
-SndLCnt:	.word	0
-
-SndLDl:		.word	0
-SndLDh:		.word	0
-SndLDCnt:	.word	0
-
-; 06: start sound, R0 - sound ID in SNDTAB list
-SNDSTA:	mtps	#600
-	call	PPTINI
+; start sound, R0 - sound #
+SNDSTA:	mtps	#600			; stop interrupts just in case
+	call	PPTINI			; init timer (stops previous sounds)
+	clr	MUSCUR			; stop music
 	asl	R0
-	mov	SNDTAB(R0), R0
-	beq	99$
+	mov	SNDTAB(R0), R0		; sound addr
+	beq	99$			; maybe just exit? (can be used to stop sound)
+	call	SndSetVars
+	mov	#SndIntLo, @#304	; set sound interrupt to low signal proc
+	mov	#1, @#177712		; timer counter to minimum
+	tst	@#177714
+	tst	@#177714
+	bis	#^B01000011, @#177710	; allow int, start, timer = 4mks, 250000 ticks per second
+99$:	mtps	#0
+	return
+
+SndSetVars:
 	mov	(R0)+, SndType		; type of sound effect
 	beq	99$			; none - exit
 	mov	(R0)+, SndTCnt		; total counter
-	mov	(R0)+, SndGCnt		; local counter
+	mov	(R0)+, SndLCnt		; local counter
 	mov	(R0)+, SndLDCnt		; local counter addition
-	mov	SndGCnt, SndLCnt	; (restore local counter)
 	mov	(R0)+, SndLLo		; low level duration
 	mov	(R0)+, SndLDl		; low level duration addition
 	mov	(R0)+, SndLHi		; high level duration
 	mov	(R0)+, SndLDh		; high level duration addition
 	mov	R0, SNDADR		; store next effect addr
-	mov	#SndIntLo, @#304	; set sound int to low signal
-	mov	#1, @#177712		; timer counter to minimum
-	tst	@#177714
-	tst	@#177714
-	bis	#^B01000001, @#177710	; allow int, start, timer = 2mks, 500000 ticks per second
-99$:	mtps	#0
-	return
+	mov	SndLCnt, SndIntLCnt	; set local counter to interrupt procedure		
+99$:	return	
 
 ; PP timer interrupts for sounds
 SndIntLo:
-	bic	#200, @#177716
+	bic	#200, @#177716		; set 
 	mov	#SndIntHi, @#304	; set next interrupt to high-level version
 	; cycle without changes to low|high durations
-	decb	SndLCnt+1
+	decb	SndIntLCnt+1		; (!) only h-byte is used
 	bpl	90$
 	; change durations of low|high
 	add	SndLDl, SndLLo		; additions to low|high durations
 	add	SndLDh, SndLHi		;
-	add	SndLDCnt, SndGCnt	; addition to local cycles count
-	mov	SndGCnt, SndLCnt	; restore local cycles count
+	add	SndLDCnt, SndLCnt	; addition to local cycles count
+	mov	SndLCnt, SndIntLCnt	; restore local cycles count
 	; end of effect?
 	dec	SndTCnt
 	bpl	90$
-	clr	@#177710		; stop timer
+	; try next effect
+	;mov	R0, -(SP)
+	;mov	SNDADR, R0
+	;call	SndSetVars
+	;mov	(SP)+, R0
+	;tst	SndType
+	;bne	90$
+	; no next effect - stop timer
+	clr	@#177710
 	tst	@#177714
 	tst	@#177714
 	rti
 90$:	movb	SndLLo+1, @#92$+2	; only high-byte used
-92$:	mov	#0, @#177712
+92$:	mov	#000000, @#177712
 	tst	@#177714
 	tst	@#177714
 	rti
@@ -273,13 +285,13 @@ SndIntHi:
 	bis	#200, @#177716
 	mov	#SndIntLo, @#304
 	movb	SndLHi+1, @#92$+2
-92$:	mov	#0, @#177712
+92$:	mov	#000000, @#177712
 	tst	@#177714
 	tst	@#177714
 	rti
 
 
-; 07: start music, R0 - music ID in MUSTAB list
+; start music, R0 - music #
 MUSSTA:	mtps	#600			; stop interrupts
 	call	PPTINI			; init pp timer
 	tst	R0			; 0 - stop music
@@ -295,7 +307,7 @@ MUSSTA:	mtps	#600			; stop interrupts
 	mov	R0, MUSCUR		; first note addr
 	tst	@#177714
 	tst	@#177714
-	mov	#MUSIN0, @#304		; set music interrupt
+	mov	#MusIntLo, @#304	; set music interrupt
 	bis	#^B01000001, @#177710	; allow int, start, timer = 2mks, 500000 ticks per second
 	mtps	#0
 	return
@@ -317,18 +329,18 @@ MUSPRO:	tst	MUSCUR			; current note addr
 	beq	20$			; empty ID - stop playing
 	bmi	10$			; empty note
 	asl	R1
-	mov	NOTPAD(R1), R1		; note fronts delays initial
-	mov	R1, MusFrontHi
-	mov	R1, MusFrontLo
+	mov	NOTPAD(R1), R1		; note delays initial
+	mov	R1, MusCountHi+2
+	mov	R1, MusCountLo+2
 	mov	R1, @#177712		; set music interrupt timer
-	tst	@#177714		; why TWO times? I don't know 
-	tst	@#177714		; but it needed for some reason
-	mov	#200, MUSIN0+2		; set #200 in bis/bic
-	mov	#200, MUSIN1+2		; in case we cleared it
+	tst	@#177714		; maybe better way here is  
+	tst	@#177714		; TST @#177714, BNE .-4
+	mov	#200, MusIntLo+2	; set #200 in bis/bic
+	mov	#200, MusIntHi+2	; in case we cleared it
 	br	99$
 10$:	; stop ticking beeper
-	clr	MUSIN0+2		; clear #200 in bis/bic
-	clr	MUSIN1+2		; so it will not tick beeper
+	clr	MusIntLo+2		; clear #200 in bis/bic
+	clr	MusIntHi+2		; so it will not tick beeper
 	br	99$
 20$:	; stop playing
 	call	PPTINI			; init PP timer
@@ -336,21 +348,23 @@ MUSPRO:	tst	MUSCUR			; current note addr
 99$:	mtps	#0
 	return
 
-MusFrontHi:	.word	0
-MusFrontLo:	.word	0
-
-; PP timer interrupts (for tones)
-MUSIN0:	bic	#200, @#177716		; low front
-	mov	#MUSIN1, @#304		; set next interrupt to high-front version
-	add	#2, MusFrontLo		; change duty
-	mov	MusFrontLo, @#177712	; set new timer as duty changed
-	tst	@#177714		; TWO times is important I think
-	tst	@#177714		;
+; timer interrupts (for tones)
+MusIntLo:
+	bic	#200, @#177716		; tick low level
+	mov	#MusIntHi, @#304	; set next interrupt to high-level version
+MusCountLo:
+	mov	#000000, @#177712	; set new timer as duty changed
+	add	#2, MusCountLo+2	; change duty (maybe add 2?)
+	tst	@#177714		; TWO (!) times is important I think
+	tst	@#177714
 	rti
-MUSIN1:	bis	#200, @#177716		; same as above just for high front
-	mov	#MUSIN0, @#304
-	sub	#2, MusFrontHi
-	mov	MusFrontHi, @#177712
+; same as above just for high signal level
+MusIntHi:
+	bis	#200, @#177716
+	mov	#MusIntLo, @#304
+MusCountHi:
+	mov	#000000, @#177712
+	sub	#2, MusCountHi+2	; do we need to test it for close to 0?
 	tst	@#177714
 	tst	@#177714
 	rti		
@@ -547,8 +561,198 @@ DebugString:
 	mov	#TxtDebug03, R0
 	call	PrintStr
 	return
-	
-	
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // LZ decompressing VRAM PPU -> VRAM CPU
+; //////////////////////////////////////////////////////////////////////////////
+; lzsa3 decompressing routines by manwe & ivanq
+; https://github.com/imachug/lzsa3
+
+; Unpacking LZ-compressed levels from PPU vram to CPU vram
+; R0 - CPU vram GlobalLevel, GlobalObj addr relative to 200000
+UnpackLevels:
+	mov	R0, -(SP)		; save GlobalLevel addr in CPU vram
+	; unpack GlobalObj, they are [byte]
+	mov	R1, PutA12
+	mov	#GlobalObj, GetA00
+	call	Unpa01
+	; unpack GlobalLevel to [byte]
+	mov	(SP), PutA12
+	mov	#GlobalLevel, GetA00
+	call	Unpa01
+	; now unpacked level is in [byte] but we need [word]
+	mov	(SP)+, R0
+	mov	R0, R1			; set source addr in the end of unpacked bytes
+	add	#CGL_DX*CGL_DY-1, R1	; source is relative to 200000
+	mov	R0, R2			; set destination addr
+	add	#CGL_DX*CGL_DY*2-2, R2	; in the end of GlobalLevel
+	sec				; convert R2 to vaddr in CPU
+	ror	R2			; destination is NOT relative to 200000
+	mov	#CGL_DX*CGL_DY-1, R3	; relocate (LEN-1) bytes because first byte not needed to relocate
+	mov	#177010, R4
+	mov	#177014, R5
+10$:	; get byte from relative [R1] -> R0
+	mov	R1, R0
+	sec
+	ror	R0
+	bcs	20$
+	mov	R0, (R4)
+	movb	(R5), R0
+	br	30$
+20$:	mov	R0, (R4)
+	movb	@#177015, R0
+30$:	; put R0 to -> [byte,?]
+	mov	R2, (R4)
+	mov	R0, (R5)
+	dec	R2
+	dec	R1
+	sob	R3, 10$
+	return
+
+; get byte -> R1 from PPU vaddr and advance it
+GetB00:	mov	(PC)+, R1
+GetA00:	.word	0
+	inc	GetA00
+	mov	R1, @#177010
+	movb	@#177012, R1
+	return
+
+; put R1 -> byte to dest CPU vaddr and advance it
+; invalidates R2
+PutB12:	mov	(PC)+, R2
+PutA12:	.word	0			; CPU vram addr rel to 200000
+	inc	PutA12
+	sec
+	ror	R2
+	bcs	10$
+	mov	R2, @#177010
+	movb	R1, @#177014
+	return
+10$:	mov	R2, @#177010
+	movb	R1, @#177015
+	return
+
+; get CPU vram [R1] byte -> R1
+;GetB12:	mov	(PC)+, R1
+;GetA12:	.word	0			; vram addr rel to 200000
+;	inc	GetA12
+GetR12:	sec
+	ror	R1
+	bcs	10$
+	mov	R1, @#177010
+	movb	@#177014, R1
+	return
+10$:	mov	R1, @#177010
+	movb	@#177015, R1
+	return
+
+; VRAM -> VRAM
+Unpa01:	CLR	R5		; no nibbles sign
+10$:	call	GetB00		; +
+	movb	R1, R3		; + movb (R1)+, R3
+	MOV	R3, R0
+	BIC	#177774, R0	; get 2 bits
+	BEQ	25$
+	CMP	R0, #3		; literals length
+	BNE	20$
+	CALL	65$
+20$:	call	GetB00		; +
+	call	PutB12		; + movb (R1)+, (R2)+
+	SOB	R0, 20$
+25$:	MOV	R3, -(SP)
+	ROLB	R3		; get 2 bits
+	ROL	R0
+	ROLB	R3
+	ROL	R0
+	ASL	R0
+	ADD	R0, PC		; run subroutine
+	BR	55$
+	BR	45$
+	BR	50$
+	CALL	60$		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+30$:	MOV	R0, R4		; save offset for future
+35$:	MOV	(SP)+, R0
+	ASR	R0
+	ASR	R0
+	BIC	#177770, R0	; get 3 bits
+	CMP	R0, #7
+	BNE	40$
+	CALL	65$
+	TSTB	R0		; match length
+	BEQ	99$
+40$:	mov	PutA12, R1	; + copy: dst - R4 -> dst, original was:
+	sub	R4, R1		; + mov r2, r3
+	call	GetR12		; + sub r4, r3
+	call	PutB12		; + movb (r3)+,(r2)+
+	inc	R0		; + inc r0
+1$:	mov	PutA12, R1	; + 1$: movb (r3)+,(r2)+
+	sub	R4, R1		; + sob r0, 1$
+	call	GetR12		; +
+	call	PutB12		; +
+	sob	R0, 1$		; +
+	BR	10$
+45$:	CLR	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ROLB	R3
+	ROL	R0
+	INC	R0
+	BR	30$
+50$:	CALL	60$ 		; get nibble in R0
+	ROLB	R3
+	ROL	R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	ADD	#513., R0
+	BR	30$
+55$:	ROLB	R3
+	BCS	35$
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BR	30$
+60$:	COM	R5
+	BMI	2$
+	MOV	R5, R0
+	CLR	R5
+	BR	3$
+2$:	call	GetB00		; +
+	bicb	R1, R5		; + bicb (R1)+, R5
+	MOV	R5, R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+	ASR	R0
+3$:	BIC	#177760, R0	; leave 4 low bits
+	RETURN
+65$:	MOV	R0, -(SP)	; save original value
+	CALL	60$ 		; get nibble in R0
+	BNE	75$
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	BNE	70$
+	; unnecessary for short files
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	SWAB	R0
+	call	GetB00		; +
+	bisb	R1, R0		; + bisb (R1)+, R0
+	inc	SP		; skip saved R0
+	inc	SP
+	return
+70$:	ADD	#15., R0
+75$:	DEC	R0
+	ADD	(SP)+, R0	; add original value
+99$:	return
+
+
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // PPU DATA SECTION //////////////////////////////////////////////////////////
@@ -670,6 +874,7 @@ MUS001:
 
 
 SND_TONE = 1
+
 ; TYPE: SND_TONE
 ; ARGS: TCNT  = total repeats count (use additions every cycle)
 ;       LCNT  = local repeats count
@@ -678,9 +883,15 @@ SND_TONE = 1
 ;       Dl = addition to Lo
 ;	Hi = high signal length
 ;       Dh = addition to Hi
-SND001:	.word	SND_TONE, 30, 1*256, 0, 250*256, -06*256,  250*256, -06*256
+; jump
+SND001:	.word	SND_TONE, 20, 1*256, 0, 250*256, -9*256,  250*256, -9*256
+	.word	0
+; spadeing
 SND002:	.word	SND_TONE, 5, 1*256, 0, 20*256, +02*256,  200*256, -50*256
-SND003:	.word	SND_TONE, 4, 50*256, -6*256, 80*256, 40*256, 70*256, 40*256
+	.word	0
+; add item
+SND003:	.word	SND_TONE, 4, 25*256, -4*256, 80*256, 40*256, 70*256, 40*256
+	.word	0
 
 
 .radix 8
@@ -712,6 +923,10 @@ END:
 
 .=VDATA
 
+; compressed levels
+@include inc_levels_lz.mac
+
+; game text messages are also in VRAM
 TXT_Menu00:	.asciz	<7>"<>'`"<5>" - "<6>"Движение"
 TXT_Menu01:	.asciz	<7>"1..8"<5>" - "<6>"Предмет"
 TXT_Menu02:	.asciz	<7>" РЕГ"<5>" - "<6>"Использовать"
@@ -720,12 +935,9 @@ TXT_Menu04:	.asciz	<7>" УСТ"<5>" - "<6>"Пауза"
 TXT_Menu05:	.asciz	<7>"СТОП"<5>" - "<6>"Сброс игры"
 TXT_Menu06:	.asciz	<6>" НАЖМИТЕ "<7>"ПРОБЕЛ"
 
-TXT_Pre_Intro:	.asciz	<7>"═╡ Ночная смена ╞═"
+TXT_Test1:	.asciz	<2>"Тест"
 
-TXT_Test1:	.ascii	<1>"Один"<12>
-		.ascii	<2>"Два"<12>
-		.ascii	<3>"Три"<12>
-		.ascii	<4>"Четыре"<0>
+TXT_Pre_Intro:	.asciz	<7>"═╡ Ночная смена ╞═"
 
 TXT_Msg1:	.asciz	<2>"Твоя смена. Лопата в шахте"<12><2>"Накопанное сложишь в этот"<12><2>"большой ящик"
 TXT_Msg2:	.asciz	<6>"Лопатой можно копать"<12><6>"..или бить врага"

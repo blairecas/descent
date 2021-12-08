@@ -232,9 +232,14 @@ function FillLevelRandom (d)
 
 function CopyToText ()
 {
+    let st = ".radix 10\n\n";
+    // objects lengths for local levels
     let arr = [];
-    let st = '';
+    for (let i=0; i<CGL_LEV_DY*CGL_LEV_DX; i++) arr.push(GlobalObjLen[i]);
+    st = st + "\nGlobalObjLen:\n\t.byte\t" + arr.join(',') + "\n";
+    st = st + "\t.even\n";
     // global level
+    arr = [];
     st = st + "GlobalLevel:\n";
     for (let y=0; y<CGL_DY; y++)
     {
@@ -242,10 +247,6 @@ function CopyToText ()
         for (let x=0; x<CGL_DX; x++) arr[y][x] = GlobalLevel[y*CGL_DX+x] & 0xFF;
         st = st + "\t.word\t" + arr[y].join(',') + "\n";
     }
-    // objects lengths for local levels
-    arr = [];
-    for (let i=0; i<CGL_LEV_DY*CGL_LEV_DX; i++) arr.push(GlobalObjLen[i]);
-    st = st + "\nGlobalObjLen:\n\t.byte\t" + arr.join(',') + "\n";
     // objects
     st = st + "\nGlobalObj:\n";
     for (let i=0; i<CGL_LEV_DY*CGL_LEV_DX; i++) {
@@ -260,6 +261,7 @@ function CopyToText ()
 	}
 	st = st + arr.join(",") + "\n";
     }
+    st = st + "\t.even\n\n.radix 8\n";
     // 
     $('#aid_tex_area').val(st);
 }
@@ -288,6 +290,8 @@ function CopyFromText ()
     {
         let sline = larr[k].trim();
 	if (sline.length == 0) continue;
+	if (sline.match(/\.radix/i)) continue;	// TODO: .radix 8 ???
+	if (sline.match(/\.even/i)) continue;
 	if (sline.toLowerCase() == 'globallevel:')  { usewith=1; copyIdx=0; continue; }
 	if (sline.toLowerCase() == 'globalobjlen:') { usewith=2; copyIdx=0; continue; }
 	if (sline.toLowerCase() == 'globalobj:')    { usewith=3; copyIdxI=copyIdxJ=copyIdxK=0; InitObjArray(); continue; }

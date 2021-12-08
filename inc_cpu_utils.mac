@@ -209,7 +209,6 @@ ScreenBackground:
 	; need next line?
 	dec	varX
 	bgt	10$			; will not use X=0
-	call	PPUWait			; wait if PPU isnt finished yet
 	return	
 ; end of 8-pix block
 90$:	dec	(R4)			; dec vaddr

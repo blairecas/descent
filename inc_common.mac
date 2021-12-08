@@ -23,6 +23,7 @@ CmdHideScreen     = 18.		; hides screen to the last half-line
 CmdDebugString    = 19.		; show info on bottom of screen
 CmdFadeInScreen   = 20.		; fade in screen
 CmdUpdItem        = 21.		; update item box with sprite
+CmdUnpackLevels   = 22.		; unpack levels data PPU vram -> CPU vram
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -90,6 +91,14 @@ EVC_MSG		= 2
 EVNT_MSG1	= 1
 EVNT_MSG2	= 2
 
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Sounds
+; //////////////////////////////////////////////////////////////////////////////
+
+SND_JUMP	= 1
+SND_SPADEING	= 2
+SND_ADDITEM	= 3
 
 ; //////////////////////////////////////////////////////////////////////////////	
 ; // CPU<->PPU exchange variables
