@@ -377,6 +377,7 @@ DrawLifeBgr:
 	asr	R0
 	asr	R0
 	asr	R0
+	inc	R0
 20$:	movb	#377, (R5)
 	mov	#177777, (R2)
 	add	R1, (R4)
@@ -400,8 +401,9 @@ DrawLifeBgr:
 ; R0 = playerLifeCur
 ; draws current life line tip
 DrawLifeCur:
+	mov	R1, -(SP)		; save playerLifeMax
 	call	SetVreg
-	mov	#VADDR+2407-<14.*SCRWID>, (R4)
+	mov	#VADDR+2407-<13.*SCRWID>, (R4)
 	; draw tip of the line	
 	mov	R0, R1
 	asr	R0
@@ -409,21 +411,27 @@ DrawLifeCur:
 	asr	R0			; R0 = X/8
 	add	R0, (R4)		; set vaddr
 	bic	#^B1111111111111000, R1	; R1 = X%8
-	mov	#^B0000000000000001, R2	; make black line
-	ash	R1, R2
-	mov	R2, R1			; make white line
-	clc
-	ror	R1
+	asl	R1
+	mov	100$(R1), R2
 	mov	#5, R3
-	mov	#SCRWID, R0
-	bicb	R2, (R5)
-	add	R0, (R4)
-30$:	bicb	R2, (R5)
-	bisb	R1, (R5)
-	add	R0, (R4)
+	mov	#SCRWID, R1
+30$:	mov	R2, (R5)
+	add	R1, (R4)
 	sob	R3, 30$
-	bicb	R2, (R5)
-	return
+	mov	(SP)+, R2		; R2 = playerLifeMax
+	asr	R2
+	asr	R2
+	asr	R2
+	cmp	R0, R2			; compare to playerLifeCur
+	bhis	99$			; nothing to add to the end?
+	sub	#SCRWID*5-1, (R4)	; add empty 'square' to end
+	mov	#5, R3
+40$:	clr	(R5)
+	add	R1, (R4)
+	sob	R3, 40$
+99$:	return
+100$:	.word	^B0000000000000000, ^B0000000100000001, ^B0000001100000011, ^B0000011100000111
+	.word	^B0000111100001111, ^B0001111100011111, ^B0011111100111111, ^B0111111101111111
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -607,6 +615,25 @@ FadeInScreen:
 	sub	#4, R4
 	sob	R0, 20$
 	return
+
+
+; screen fade out, R0=[1..144.]
+FadeOutScreen:
+	tst	R0
+	bne	2$
+	inc	R0
+2$:	cmp	R0, #144.
+	blos	10$
+	mov	#144., R0
+10$:	mov	#VLinesTable, R4
+	mov	#287.*4+VLinesTable+2, R5
+	mov	#SCRWID*296.+VADDR, R1		; vaddr of 297th line (from 0)
+20$:	mov	R1, (R4)+
+	tst	(R4)+
+	mov	R1, -(R5)
+	tst	-(R5)
+	sob	R0, 20$
+99$:	return
 
 
 ; update item box with sprite from vbuffer0 (0,0), R1-vaddr

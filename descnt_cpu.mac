@@ -70,7 +70,7 @@ MainCycle:
 	jmp	MainCycle
 
 MainCycleTable:	
-	.WORD	MainReset, MainMenu, MainPrepare, MainScreenUp, MainGame
+	.WORD	MainReset, MainMenu, MainPrepare, MainScreenUp, MainGame, MainOverPrepare, MainOver
 
 
 ; Menu Tiles - X, Y, Id1, Id2, Id3 ... 255. then again till Id=0
@@ -85,14 +85,14 @@ MenuTbl10:	.byte	013., 110., 00.,	013., 120., 01.,	013., 130., 02.
 
 ; called after game reset - reset vars and draw main menu
 MainReset:
+	clr	R0
+	.ppexe	#CmdFillScreen		; clear screen plane-0
+	call	ClearScreen		; clear screen planes-1,2
 	; variables from reset
 	mov	#2., VSyncX		; game speed - #2 of 50Hz sync interrupt (25fps)
 	; screen prepare (clear)
 	mov	#VADDR, R0		; reset lines table addrs (if stopped in a middle of changing)
 	.ppexe	#CmdLinesFromR0	
-	clr	R0
-	.ppexe	#CmdFillScreen		; clear screen plane-0
-	call	ClearScreen		; clear screen planes-1,2
 	; put logo to buffer
 	call	ClearVBuffer
 	call	ClearLevel
@@ -168,6 +168,7 @@ MainMenu:
 
 ; game prepare
 MainPrepare:
+	.ppexe	#CmdClrScrBottom
 	.ppexe	#CmdHideScreen		; hide anything going on screen
 	; player vars prepare
 	mov	#playerObject, R0
@@ -181,8 +182,8 @@ MainPrepare:
 	clr	playerAni
 	mov	#5., playerSpr
 	clr	playerItemNew
-	mov	#64., playerLife
-	mov	#64., playerLifeMax
+	mov	#63., playerLife
+	mov	#63., playerLifeMax
 	clr	playerLifeCur
 	; stage text output
 	mov	#8., R0
@@ -218,23 +219,14 @@ MainPrepare:
 	call	InitLevelField		; init level
 	; go show screen
 	call	RedrawFull
-	clr	varY			; for screen fade in
-	mov	#1, varDY		;
+	call	PrepareFade
 	inc	CurrentMode		; next mode -> fade in screen
-	mov	#1., VSyncX		; speed up to 50fps
 	return
 
 
 ; make screen appear
 MainScreenUp:
-	mov	varDY, R0
-	asr	R0
-	asr	R0
-	add	R0, varY
-	cmp	varDY, #24.
-	bhis	2$
-	inc	varDY
-2$:	mov	varY, R0
+	call	FadeInOutTick
 	.ppexe	#CmdFadeInScreen
 	cmp	varY, #144.
 	blo	10$
@@ -255,6 +247,56 @@ MainGame:
 	call	ProcessHits
 	call	ProcessObjects
 	call	ProcessPlayerOut
+	; test for game over
+	tst	playerLife
+	bgt	99$
+	call	DrawPlayerLife		; draw life at zero
+	call	PrepareFade
+	inc	CurrentMode		; next mode - fade out screen
+99$:	return
+
+
+; game over prepare
+MainOverPrepare:
+	call	FadeInOutTick
+	.ppexe	#CmdFadeOutScreen
+	cmp	varY, #144.
+	blo	10$
+	.ppexe	#CmdClrScrBottom
+	.ppexe	#CmdHideScreen		; hide anything going on screen
+	mov	#11., R0		; game over text output
+	mov	#13., R1
+	mov	#288., R2
+	.ppexe	#CmdPrintStr
+	inc	CurrentMode
+10$:	return
+
+
+; game over
+MainOver:
+	dec	varY
+	bgt	99$
+	clr	CurrentMode
+99$:	return
+
+
+; prepare vars for fade in fade out
+PrepareFade:
+	clr	varY			; for screen fade in
+	mov	#1, varDY		;
+	mov	#1., VSyncX		; speed up to 50fps
+	return
+
+; adjust vars for fade in fade out
+FadeInOutTick:
+	mov	varDY, R0
+	asr	R0
+	asr	R0
+	add	R0, varY
+	cmp	varDY, #24.
+	bhis	2$
+	inc	varDY
+2$:	mov	varY, R0
 	return
 
 
@@ -1949,7 +1991,7 @@ varAddr3:	.WORD	0
 EnemiesHeight:	.byte	8.		; spider 1
 		.even
 ; enemies attack power
-EnemiesAttack:	.byte	1.		; spider 1
+EnemiesAttack:	.byte	8.		; spider 1
 		.even
 
 
