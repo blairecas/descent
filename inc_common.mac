@@ -24,6 +24,8 @@ CmdDebugString    = 19.		; show info on bottom of screen
 CmdFadeInScreen   = 20.		; fade in screen
 CmdUpdItem        = 21.		; update item box with sprite
 CmdUnpackLevels   = 22.		; unpack levels data PPU vram -> CPU vram
+CmdDrawLifeBgr    = 23.		; draws player life bar background
+CmdDrawLifeCur    = 24.		; draws current life line
 
 
 ; //////////////////////////////////////////////////////////////////////////////

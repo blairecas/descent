@@ -28,6 +28,13 @@ ItemBoxVaddr:
 
 ; draw game field border and item boxes
 DrawFieldBorder:
+	mov	playerLifeMax, R0
+	.ppexe	#CmdDrawLifeBgr
+	; draw heart
+	mov	#8., R0
+	mov	#VADDR+2406-<15.*SCRWID>, R1
+	mov	#^B0000000000000100, R2	; black bgr, red fore
+	.ppexe	#CmdDrawTile8Vaddr
 	; draw sprites border around the field
 	mov	#FieldY-8.*SCRWID+FieldX-1+VADDR, R1
 	mov	#FieldDY*16.+8.*SCRWID, R4
@@ -231,6 +238,49 @@ ScreenBackground:
 	.WORD	^B00100000
 	.WORD	^B01000000
 	.WORD	^B10000000
+
+
+; draws current player life and approach it to actual value
+DrawPlayerLife:
+	mov	playerLifeCur, R0
+	cmp	R0, playerLife
+	blo	10$
+	bhi	20$
+	return
+10$:	call	DrawLifeLine
+	inc	playerLifeCur
+	return
+20$:	call	DrawLifeLine
+	dec	playerLifeCur
+	return
+
+DrawLifeLine:
+	.ppexe	#CmdDrawLifeCur
+	call	SetVreg
+	mov	#VADDR+2407-<14.*SCRWID>, (R4)
+	; draw tip of the line	
+	mov	R0, R1
+	asr	R0
+	asr	R0
+	asr	R0			; R0 = X/8
+	add	R0, (R4)		; set vaddr
+	bic	#^B1111111111111000, R1	; R1 = X%8
+	mov	#^B0000000100000001, R2	; make black line
+	ash	R1, R2
+	mov	R2, R1			; make white line
+	clc
+	ror	R1
+	bic	#^B0000000010000000, R1	; clear out of byte
+	mov	#5, R3
+	mov	#SCRWID, R0
+	bic	R2, (R5)
+	add	R0, (R4)
+30$:	bic	R2, (R5)
+	bis	R1, (R5)
+	add	R0, (R4)
+	sob	R3, 30$
+	bic	R2, (R5)	
+	return
 
 
 ; //////////////////////////////////////////////////////////////////////////////

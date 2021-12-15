@@ -117,6 +117,8 @@ CommandsTable:
 	.word	FadeInScreen		; 20. screen fade in, R0=1..144.
 	.word	UpdItem			; 21. update item box with sprite
 	.word	UnpackLevels		; 22. unpack levels data PPU vram -> CPU vram
+	.word	DrawLifeBgr		; 23. draw player life bar background
+	.word	DrawLifeCur		; 24. draw player life line
 	
 	
 ; //////////////////////////////////////////////////////////////////////////////
@@ -884,13 +886,13 @@ SND_TONE = 1
 ;	Hi = high signal length
 ;       Dh = addition to Hi
 ; jump
-SND001:	.word	SND_TONE, 20, 1*256, 0, 250*256, -9*256,  250*256, -9*256
+SND001:	.word	SND_TONE, 20, 01*256, 0, 250*256, -9*256,  250*256, -9*256
 	.word	0
 ; spadeing
-SND002:	.word	SND_TONE, 5, 1*256, 0, 20*256, +02*256,  200*256, -50*256
+SND002:	.word	SND_TONE, 05, 01*256, 0, 20*256, +02*256,  200*256, -30*256
 	.word	0
 ; add item
-SND003:	.word	SND_TONE, 4, 25*256, -4*256, 80*256, 40*256, 70*256, 40*256
+SND003:	.word	SND_TONE, 04, 25*256, -4*256, 80*256, 40*256, 70*256, 40*256
 	.word	0
 
 

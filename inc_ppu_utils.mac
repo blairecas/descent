@@ -354,6 +354,78 @@ DrawTile8Vaddr:
 	return
 
 
+; R0 = playerLifeMax
+; draw background for life bar
+DrawLifeBgr:
+	call	SetVreg
+	mov	#177014, R2
+	mov	#VADDR+2406-<15.*SCRWID>, (R4)
+	mov	#SCRWID, R1
+	; vert line
+	movb	#377, (R5)
+	mov	#177777, (R2)
+	add	R1, (R4)
+	mov	#7, R3
+10$:	bisb	#1, (R5)
+	bis	#^B0000000100000001, (R2)
+	add	R1, (R4)
+	sob	R3, 10$
+	movb	#377, (R5)
+	mov	#177777, (R2)
+	sub	#SCRWID*8.-1, (R4)
+	; horiz line
+	asr	R0
+	asr	R0
+	asr	R0
+20$:	movb	#377, (R5)
+	mov	#177777, (R2)
+	add	R1, (R4)
+	mov	#7, R3
+30$:	clrb	(R5)
+	clr	(R2)
+	add	R1, (R4)
+	sob	R3, 30$
+	movb	#377, (R5)
+	mov	#177777, (R2)
+	sub	#SCRWID*8.-1, (R4)
+	sob	R0, 20$
+	; vert line
+	mov	#9., R3
+40$:	bisb	#200, (R5)
+	bis	#^B0000000100000001, (R2)
+	add	R1, (R4)
+	sob	R3, 40$
+	return
+
+; R0 = playerLifeCur
+; draws current life line tip
+DrawLifeCur:
+	call	SetVreg
+	mov	#VADDR+2407-<14.*SCRWID>, (R4)
+	; draw tip of the line	
+	mov	R0, R1
+	asr	R0
+	asr	R0
+	asr	R0			; R0 = X/8
+	add	R0, (R4)		; set vaddr
+	bic	#^B1111111111111000, R1	; R1 = X%8
+	mov	#^B0000000000000001, R2	; make black line
+	ash	R1, R2
+	mov	R2, R1			; make white line
+	clc
+	ror	R1
+	mov	#5, R3
+	mov	#SCRWID, R0
+	bicb	R2, (R5)
+	add	R0, (R4)
+30$:	bicb	R2, (R5)
+	bisb	R1, (R5)
+	add	R0, (R4)
+	sob	R3, 30$
+	bicb	R2, (R5)
+	return
+
+
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Buffer 
 ; //////////////////////////////////////////////////////////////////////////////

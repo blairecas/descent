@@ -168,8 +168,22 @@ MainMenu:
 
 ; game prepare
 MainPrepare:
-	; prepare screen 
 	.ppexe	#CmdHideScreen		; hide anything going on screen
+	; player vars prepare
+	mov	#playerObject, R0
+	mov	#playerObjectEnd-playerObject/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+	mov	#PLSWALKING, playerState
+	mov	#200., playerX
+	mov	#048., playerY
+	inc	playerDir
+	clr	playerAni
+	mov	#5., playerSpr
+	clr	playerItemNew
+	mov	#64., playerLife
+	mov	#64., playerLifeMax
+	clr	playerLifeCur
 	; stage text output
 	mov	#8., R0
 	mov	#14., R1
@@ -186,44 +200,28 @@ MainPrepare:
 	; wait for unpacking to finish 
 	call	PpuWait
 	; leve is unpacked but it's with dirty high-bytes
-
 	; fill screen plane 0
 	mov	#177777, R0
 	.ppexe	#CmdFillScreen
 	; init tiles weights while PPU is filling plane 0
 	call	InitTilesWeight		; finish init tiles
-
+	; finish drawing
 	call	DrawFieldBorder		; prepare game borders & item boxes
 	call	ClearItems
 	call	UpdateItems		; draw player items
-
+	call	SelectNewItem
+	; init level field (global->local)
 	clr	glevelX			; glevelX = 377 - not initialized
 	dec	glevelX			; glevelY = 377
 	clrb	glevelNewX		; first level coords
 	clrb	glevelNewY		;
 	call	InitLevelField		; init level
-
-	; player vars prepare
-	mov	#playerObject, R0
-	mov	#playerObjectEnd-playerObject/2, R3
-	clr	(R0)+
-	sob	R3, .-2
-	mov	#PLSWALKING, playerState
-	mov	#200., playerX
-	mov	#048., playerY
-	inc	playerDir
-	clr	playerAni
-	mov	#5., playerSpr
-	clr	playerItemNew
-	call	SelectNewItem
-
 	; go show screen
 	call	RedrawFull
 	clr	varY			; for screen fade in
 	mov	#1, varDY		;
 	inc	CurrentMode		; next mode -> fade in screen
 	mov	#1., VSyncX		; speed up to 50fps
-
 	return
 
 
@@ -247,6 +245,7 @@ MainScreenUp:
 	
 ; game processing
 MainGame:
+	call	DrawPlayerLife
 	call	BufAllSprites
 	call	DrawChanged
 	; processing
@@ -1463,7 +1462,7 @@ ProcessObjects:
 10$:	mov	#LevelObj, Process000+2
 Process000:
 	mov	#0, R0			; addr of object struct
-	mov	(R0), R1		; R1=[type][subtype]
+	mov	(R0), R1		; R1=[subtype | type]
 	beq	20$			; have object?
 	mov	R1, R2
 	clrb	R2
@@ -1571,6 +1570,7 @@ ProcObjEnemy:
 	mov	R0, R5
 	asl	R2
 	call	@EnemySubProcTable(R2)
+	call	EnemyIntersect
 	return
 
 EnemySubProcTable:
@@ -1632,6 +1632,59 @@ ProcSpider1:
 60$:	sub	#2, 4(R5)
 	return
 
+
+; check enemy intersects with player, usually decrease health
+; R5=enemy obj
+EnemyIntersect:
+	mov	4(R5), R1			; R1 = enemy X
+	mov	playerX, R2			; R2 = player X
+	call	CheckIntersectX
+	bcc	99$
+	mov	(R5), R4			; [subtype | type]
+	clrb	R4
+	swab	R4
+	movb	EnemiesHeight(R4), R0		; R0 - enemy height-1
+	mov	6(R5), R1			; R1 = enemy Y
+	mov	playerY, R2			; R2 = player Y
+	call	CheckIntersectY
+	bcc	99$
+	; have intersection, decrease life
+	movb	EnemiesAttack(R4), R0
+	sub	R0, playerLife
+	bge	99$
+	clr	playerLife
+99$:	return
+
+; check coordinates X intersect, adjust with some pixels at sides
+; R1 = [R1+2..R1+13], R2 = [R2+3..R2+12]
+CheckIntersectX:
+	add	#2, R1
+	add	#12., R2
+	cmp	R1, R2
+	bhi	90$
+	add	#11., R1
+	sub	#9., R2
+	cmp	R1, R2
+	blo	90$
+	sec
+	return
+90$:	clc
+	return
+
+; check coordinated Y intersect, adjust enemy Y with R0
+CheckIntersectY:
+	add	#15., R1
+	add	#2., R2
+	cmp	R1, R2
+	blo	90$
+	sub	R0, R1
+	add	#13., R2
+	cmp	R1, R2
+	bhi	90$
+	sec
+	return
+90$:	clc
+	return
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -1862,6 +1915,10 @@ playerAni:	.word	0
 playerItem:	.word	1		; currently selected item slot [0..7]
 playerItemNew:	.word	1		; item slot to be selected on this frame
 
+playerLife:	.word	0
+playerLifeMax:	.word	0
+playerLifeCur:	.word	0
+
 plActing:	.word	0		; item number player is using now (it maybe not currently selected)
 plActingArg1:	.word	0		; parameter 1 for usage (e.g. direction for spade)
 plActingArg2:	.word	0		; parameter 2 for usage (e.g. animation # for spade)
@@ -1886,6 +1943,15 @@ varDY:		.WORD	0
 varAddr:	.WORD	0
 varAddr2:	.WORD	0
 varAddr3:	.WORD	0
+
+
+; enemies heighs-1 in pixels from bottom
+EnemiesHeight:	.byte	8.		; spider 1
+		.even
+; enemies attack power
+EnemiesAttack:	.byte	1.		; spider 1
+		.even
+
 
 		; bits: 7 6 5 4 [3 2] [1 0]
 		; 7 - 'current frame' draw flag, 6 - 'previous frame'

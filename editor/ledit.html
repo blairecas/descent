@@ -236,7 +236,7 @@ function CopyToText ()
     // objects lengths for local levels
     let arr = [];
     for (let i=0; i<CGL_LEV_DY*CGL_LEV_DX; i++) arr.push(GlobalObjLen[i]);
-    st = st + "\nGlobalObjLen:\n\t.byte\t" + arr.join(',') + "\n";
+    st = st + "GlobalObjLen:\n\t.byte\t" + arr.join(',') + "\n";
     st = st + "\t.even\n";
     // global level
     arr = [];
