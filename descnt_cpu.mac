@@ -1160,9 +1160,9 @@ Acting:
 99$:	return
 
 ActingStartTable:
-	.word	AcStartNone, AcStartLight, AcStartSpade
+	.word	AcStartNone, AcStartLight, AcStartSpade, AcStartHealth
 ActingTable:
-	.word	ActingNone, ActingNone, ActingSpade
+	.word	ActingNone, ActingNone, ActingSpade, ActingNone
 
 ; nothing to do - clear plActing variable
 AcStartNone:
@@ -1197,9 +1197,36 @@ AcStartSpade:
 40$:	mov	#2, plActingArg1
 	return
 
+; standard health increase item
+AcStartHealth:
+	add	#16., playerLife		; add life
+	cmp	playerLife, playerLifeMax	; check for overflow
+	ble	90$
+	mov	playerLifeMax, playerLife
+90$:	; consume item
+	call	ConsumeItem			; consume health item
+	clr	plActing			; clear acting state as it already happened
+	return
+
+; decrease item count and clear if zero
+ConsumeItem:
+	mov	playerItem, R1
+	asl	R1
+	mov	Items(R1), R0
+	swab	R0
+	decb	R0
+	bgt	10$
+	clr	R0
+10$:	swab	R0
+	mov	R0, Items(R1)
+	call	UpdateItems
+	return
+
+; nothing to act with
 ActingNone:
 	return
 
+; spade acting
 spadeHitsTableX:	.byte	15.+5, 8., -5, 8.
 spadeHitsTableY:	.byte	10., 15.+5, 10., -5
 
@@ -1970,8 +1997,8 @@ PlayerObjectEnd:
 ; player item objects [0..7] (selected with 1..8), low byte - item #, high byte - item count
 Items:		.word	0, 0, 0, 0, 0, 0, 0, 0
 
-		;	0    1    2
-ItemBaseSpr:	.byte	00., 10., 11.
+		;	0    1    2    3
+ItemBaseSpr:	.byte	00., 10., 11., 12.
 		.even
 
 hitpointX:	.word	0		; hitting something at this point

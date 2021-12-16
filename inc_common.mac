@@ -81,6 +81,7 @@ TSUB_SPIDER1	= 0
 ; (!) change table in item processing if changing here (!)
 ITEM_LIGHT	= 1
 ITEM_SPADE	= 2
+ITEM_CHERRY	= 3
 
 TRIG_APPR	= 1		; approach trigger, arg0 = approach max distance by x or y
 
