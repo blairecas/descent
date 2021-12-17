@@ -411,8 +411,10 @@ DrawChanged:
 10$:	mov	#CLV_LOCAL_DX, varX	;
 20$:	mov	-(R5), R0		; decrease addr and get level unit
 	; changed buffer
-	bit	#140000, R0		; check current+previous bits
+	bit	#^B1100000000000000, R0	; check current+previous bits
 	beq	50$
+	bit	#^B0010000000000000, R0	; check darken
+	bne	50$
 	; draw buffer to screen
 	mov	varX, R1
 	mov	varY, R2
@@ -445,14 +447,37 @@ DrawChanged:
 	return
 
 
+; draw all level with respect to darkened tiles
+DrawLevelDark:
+	mov	#LevelEnd, R5		; last level unit addr + 2
+	mov	#CLV_LOCAL_DY, varY	; traverse backwards
+10$:	mov	#CLV_LOCAL_DX, varX	;
+20$:	mov	-(R5), R0		; decrease addr and get level unit
+	; draw or clear
+	mov	varX, R1
+	mov	varY, R2
+	mov	R5, -(SP)
+	bit	#^B0010000000000000, R0
+	beq	30$
+	call	Clr2Scr16
+	br	40$
+30$:	call	Buf2Scr16
+40$:	mov	(SP)+, R5
+	dec	varX
+	bge	20$
+	dec	varY
+	bge	10$
+	return
+
+
 ; buffer all tiles
 BufAllTiles:
 	mov	#LevelEnd, R5
 	mov	#FieldDY, R2
 10$:	mov	#FieldDX, R1
 20$:	mov	-(R5), R0
-	bic	#^B1111111100000000, R0
-	bis	#040000, (R5)		; mark tile as 'recently changed' also
+	bic	#^B1111111100000000, R0	; clear all flags except 'darkened'
+;	bis	#040000, (R5)		; mark tile as 'recently changed' also
 	mov	R1, -(SP)
 	mov	R2, -(SP)
 	mov	R5, -(SP)
@@ -471,7 +496,7 @@ BufAllTiles:
 RedrawFull:
 	call	BufAllTiles
 	call	BufAllSprites
-	call	DrawChanged
+	call	DrawLevelDark
 	return
 
 
@@ -640,6 +665,7 @@ InitTilesWeight:
 	mov	#GlobalLevel-200000, R0
 	sec
 	ror	R0
+	mov	R0, -(SP)		; save to stack, don't forget to restore
 	mov	R0, (R4)
 	mov	#CGL_DY*CGL_DX, R3
 10$:	mov	(R5), R0
@@ -648,9 +674,25 @@ InitTilesWeight:
 	bisb	TilesWeight(R0), R1
 	swab	R1
 	bis	R1, R0
+	bis	#^B0010000000000000, R0	; all tiles will be darkened by default
 	mov	R0, (R5)
 	inc	(R4)
 	sob	R3, 10$
+	; undarken upper 5 lines
+	mov	(SP), (R4)
+	mov	#5*CGL_DX, R3
+20$:	bic	#^B0010000000000000, (R5)
+	inc	(R4)
+	sob	R3, 20$
+	; undarken first 2 screens
+	mov	(SP)+, (R4)		; (!) restore stack
+	mov	#FieldDY, R3
+30$:	mov	#CLV_LOCAL_DX*2+1, R2
+40$:	bic	#^B0010000000000000, (R5)
+	inc	(R4)
+	sob	R2, 40$
+	add	#CGL_DX-<CLV_LOCAL_DX*2>-1, (R4)
+	sob	R3, 30$
 	return
 
 
@@ -1205,7 +1247,7 @@ AcStartHealth:
 	mov	playerLifeMax, playerLife
 90$:	; consume item
 	call	ConsumeItem			; consume health item
-	clr	plActing			; clear acting state as it already happened
+ 	clr	plActing			; clear acting state as it already happened
 	return
 
 ; decrease item count and clear if zero
@@ -1614,6 +1656,8 @@ ProcObjTrig:
 ; find object by [type][subtype], if not found - point R0 to playerObj
 ; R1=[type][subtype]
 ObjFindByType:
+	tst	R1			; do we need to search at all?
+	beq	90$			; no - set on player
 	mov	#LevelObj, R0
 10$:	cmp	(R0), R1
 	beq	99$
@@ -1621,7 +1665,7 @@ ObjFindByType:
 	cmp	R0, #LevelObjEnd
 	blo	10$
 	; not found
-	mov	#playerObject, R0
+90$:	mov	#playerObject, R0
 99$:	return
 
 
@@ -2081,6 +2125,6 @@ END:
 EventMsg1:
 	.byte	EVC_CLR,   EVC_MSG,9.,TOBJ_FRIEND,0,   0
 EventMsg2:
-	.byte	EVC_CLR,   EVC_MSG,10.,TOBJ_ITEM,ITEM_SPADE,    0
+	.byte	EVC_CLR,   EVC_MSG,10.,0,0,    0
 
 ENDVram12:

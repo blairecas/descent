@@ -110,17 +110,18 @@ CommandsTable:
 	.word	BufTile			; 13. tile 16x16 to buffer
 	.word	BufSprite		; 14. 16x16 sprite with mask to buffer
 	.word	Buf2Scr16		; 15. buffer tile 16x16 to screen
-	.word	FillScreen		; 16. fill screen plane 0 with R0
-	.word	LinesFromR0		; 17. set lines vaddrs starting from R0
-	.word	HideScreen		; 18. hides screen (8 lines of bottom is on center)
-	.word	DebugString		; 19. show info on bottom of screen
-	.word	FadeInScreen		; 20. screen fade in, R0=1..144.
-	.word	FadeOutScreen		; 21. screen fade out, R0=1..144.
-	.word	UpdItem			; 22. update item box with sprite
-	.word	UnpackLevels		; 23. unpack levels data PPU vram -> CPU vram
-	.word	DrawLifeBgr		; 24. draw player life bar background
-	.word	DrawLifeCur		; 25. draw player life line
-	.word	ClrScrBottom		; 26. clear last 12 lines of screen vmem
+	.word	Clr2Scr16		; 16. clear tile 16x16 on screen
+	.word	FillScreen		; 17. fill screen plane 0 with R0
+	.word	LinesFromR0		; 18. set lines vaddrs starting from R0
+	.word	HideScreen		; 19. hides screen (8 lines of bottom is on center)
+	.word	DebugString		; 20. show info on bottom of screen
+	.word	FadeInScreen		; 21. screen fade in, R0=1..144.
+	.word	FadeOutScreen		; 22. screen fade out, R0=1..144.
+	.word	UpdItem			; 23. update item box with sprite
+	.word	UnpackLevels		; 24. unpack levels data PPU vram -> CPU vram
+	.word	DrawLifeBgr		; 25. draw player life bar background
+	.word	DrawLifeCur		; 26. draw player life line
+	.word	ClrScrBottom		; 27. clear last 12 lines of screen vmem
 
 	
 ; //////////////////////////////////////////////////////////////////////////////
@@ -957,6 +958,6 @@ TXT_Pre_Intro:	.asciz	<7>"═╡ Ночная смена ╞═"
 TXT_Game_Over:	.asciz	<7>"Тут и сказочке конец"
 
 TXT_Msg1:	.asciz	<2>"Твоя смена. Лопата в шахте"<12><2>"Накопанное сложишь в этот"<12><2>"большой ящик"
-TXT_Msg2:	.asciz	<6>"Лопатой можно копать"<12><6>"..или бить врага"
+TXT_Msg2:	.asciz	<6>"Тут темно и опасно"<12><6>"Нужен какой-то"<12><6>"Источник света"
 
 ENDVram0:

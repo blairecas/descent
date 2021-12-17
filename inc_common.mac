@@ -17,17 +17,18 @@ CmdDrawTile8Vaddr = 12.		; draw 8x8 tile to vaddr
 CmdBufTile        = 13.		; tile 16x16 to buffer
 CmdBufSprite      = 14.		; buffer 16x16 sprite with mask
 CmdBuf2Scr16      = 15.		; 16x16 buffer tile to screen
-CmdFillScreen     = 16.		; fill half plane 0 with R0
-CmdLinesFromR0    = 17.		; set lines vaddrs starting from R0
-CmdHideScreen     = 18.		; hides screen to the last half-line
-CmdDebugString    = 19.		; show info on bottom of screen
-CmdFadeInScreen   = 20.		; fade in screen
-CmdFadeOutScreen  = 21.		; fade out screen
-CmdUpdItem        = 22.		; update item box with sprite
-CmdUnpackLevels   = 23.		; unpack levels data PPU vram -> CPU vram
-CmdDrawLifeBgr    = 24.		; draws player life bar background
-CmdDrawLifeCur    = 25.		; draws current life line
-CmdClrScrBottom   = 26.		; clear last 12 lines of screen vmem
+CmdClr2Scr16      = 16.		; clear 16x16 tile on screen
+CmdFillScreen     = 17.		; fill half plane 0 with R0
+CmdLinesFromR0    = 18.		; set lines vaddrs starting from R0
+CmdHideScreen     = 19.		; hides screen to the last half-line
+CmdDebugString    = 20.		; show info on bottom of screen
+CmdFadeInScreen   = 21.		; fade in screen
+CmdFadeOutScreen  = 22.		; fade out screen
+CmdUpdItem        = 23.		; update item box with sprite
+CmdUnpackLevels   = 24.		; unpack levels data PPU vram -> CPU vram
+CmdDrawLifeBgr    = 25.		; draws player life bar background
+CmdDrawLifeCur    = 26.		; draws current life line
+CmdClrScrBottom   = 27.		; clear last 12 lines of screen vmem
 
 
 ; //////////////////////////////////////////////////////////////////////////////

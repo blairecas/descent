@@ -249,7 +249,10 @@ PrintMsg:
 	mov	(SP)+, R1
 	mov	(SP)+, R2
 	; adjust coords
-	mov	PrintMsgDY, R0
+	cmp	R1, #FieldX		; test for X < left border
+	bgt	1$
+	mov	#FieldX+1, R1
+1$:	mov	PrintMsgDY, R0
 	ash	#3, R0
 	sub	R0, R2
 	dec	R1
@@ -258,10 +261,10 @@ PrintMsg:
 	add	R1, R4			; R4=right border of msg in 8-pix
 	mov	#FieldDX*2+FieldX, R5
 	cmp	R4, R5
-	blt	1$
+	blt	2$
 	sub	R5, R4
 	sub	R4, R1
-1$:	; save coords again
+2$:	; save coords again
 	mov	R2, -(SP)
 	mov	R1, -(SP)
 	; set vaddr
@@ -474,8 +477,7 @@ BufTile:
 
 ; draw 16x16 from buffer to screen, R1-levelX, R2-levelY
 Buf2Scr16:
-	mov	#177010, R4
-	mov	#177012, R5
+	call	SetVreg
 	; to screen addr
 	asl	R2
 	mov	LevYScrOfs(R2), R0
@@ -510,6 +512,26 @@ Buf2Scr16:
 	movb	(R0), (R5)
 	add	R1, (R4)
 	add	R2, R0
+	sob	R3, 10$
+	return
+
+
+; clear 16x16 on screen
+; R1=levelX, R2=levelY
+Clr2Scr16:
+	call	SetVreg
+	; to screen addr
+	asl	R2
+	mov	LevYScrOfs(R2), R0
+	asl	R1			; LevelX*2 -> R1
+	add	R1, R0
+	mov	R0, (R4)		; set vaddr
+	mov	#SCRWID-1, R1
+	mov	#16., R3
+10$:	clr	(R5)
+	inc	(R4)
+	clr	(R5)
+	add	R1, (R4)
 	sob	R3, 10$
 	return
 

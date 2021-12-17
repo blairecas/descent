@@ -380,6 +380,27 @@ Buf2Scr16:
 	return
 
 
+; clear 16x16 on screen
+; R1=levelX, R2=levelY
+Clr2Scr16:
+	.ppexe	#CmdClr2Scr16
+	call	SetVreg
+	; to screen addr
+	asl	R2
+	mov	LevYScrOfs(R2), R0	; R0=starting screen line addr
+	asl	R1			; R1=LevelX*2
+	add	R1, R0			; R0=scr addr
+	mov	R0, (R4)		; screen addr -> @#176640
+	mov	#SCRWID-1, R1
+	mov	#16., R3
+10$:	clr	(R5)
+	inc	(R4)
+	clr	(R5)
+	add	R1, (R4)
+	sob	R3, 10$
+	return
+
+
 ; 16x16 sprite -> buffer with mask, R0=spr #, R1=x, R2=y
 BufSprite:
 	; apply sprite Y-start and get DY
