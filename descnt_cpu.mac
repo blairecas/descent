@@ -185,6 +185,8 @@ MainPrepare:
 	mov	#63., playerLife
 	mov	#63., playerLifeMax
 	clr	playerLifeCur
+	clr	plLightType
+	inc	plLightType		; DEBUG - delete this
 	; stage text output
 	mov	#8., R0
 	mov	#14., R1
@@ -414,7 +416,7 @@ DrawChanged:
 	bit	#^B1100000000000000, R0	; check current+previous bits
 	beq	50$
 	bit	#^B0010000000000000, R0	; check darken
-	bne	50$
+	bne	30$
 	; draw buffer to screen
 	mov	varX, R1
 	mov	varY, R2
@@ -424,7 +426,7 @@ DrawChanged:
 	mov	(SP)+, R0
 	mov	(SP)+, R5
 	; if current - restore buffer
-	bit	#100000, R0
+30$:	bit	#100000, R0
 	beq	40$
 	; clear current and set previous bits, and restore
 	bic	#100000, R0
@@ -1119,13 +1121,79 @@ PlayerClimbing:
 	
 PlayerDying:
 	return
-	
+
+
+; light square x,y [R0, R1]
+; R2, R3 must be set to appropriate 'darken' and 'previous' bits
+PLightXY:
+	mov	R0, R4				; square X
+	blt	99$				; if negative - exit
+	cmp	R4, #CLV_LOCAL_DX		; check out of DX
+	bgt	99$
+	mov	R1, R5
+	blt	99$
+	cmp	R5, #CLV_LOCAL_DY
+	bgt	99$
+	ash	#4, R5				; square Y * 16
+	add	R4, R5				; R5 = level offset in units
+	asl	R5				; -> to words
+	add	#Level, R5			; R5 = level addr
+	bit	R2, (R5)
+	beq	99$
+	bic	R2, (R5)
+	bis	R3, (R5)
+99$:	return
+
+PLightSquare:
+	mov	#^B0010000000000000, R2		; 'darkened' bit
+	mov	#^B0100000000000000, R3		; 'previous' bit
+	mov	#-4, R4
+	mov	#8., R5
+	mov	playerX, R0
+	add	R5, R0
+	ash	R4, R0
+	mov	playerY, R1
+	add	R5, R1
+	ash	R4, R1
+	dec	R0
+	dec	R1
+	call	PLightXY
+	inc	R0
+	call	PLightXY
+	inc	R0
+	call	PLightXY
+	inc	R1
+	call	PLightXY
+	dec	R0
+	call	PLightXY
+	dec	R0
+	call	PLightXY
+	inc	R1
+	call	PLightXY
+	inc	R0
+	call	PLightXY
+	inc	R0
+	call	PLightXY
+	return
+
+PLightLevel:
+	return
+
 	
 PStateTable:
-	.WORD	PlayerWalking, PlayerFalling, PlayerJumping, PlayerClimbing, PlayerDying
-	
+	.word	PlayerWalking, PlayerFalling, PlayerJumping, PlayerClimbing, PlayerDying
+PLightTable:
+	.word	RetFunc, PLightSquare, PLightLevel, RetFunc
 
+; main process player function
 ProcessPlayer:
+	; process player light
+	bit	#1, FrameCount			; every 2nd frame is enough
+	bne	10$
+	mov	plLightType, R0
+	asl	R0
+	call	@PLightTable(R0)
+10$:	; process player states
 	mov	playerState, R0
 	asl	R0
 	call	@PStateTable(R0)
@@ -1202,9 +1270,9 @@ Acting:
 99$:	return
 
 ActingStartTable:
-	.word	AcStartNone, AcStartLight, AcStartSpade, AcStartHealth
+	.word	AcStartNone, AcStartLight, AcStartSpade, AcStartHealth, AcStartNone
 ActingTable:
-	.word	ActingNone, ActingNone, ActingSpade, ActingNone
+	.word	RetFunc, RetFunc, ActingSpade, RetFunc, RetFunc
 
 ; nothing to do - clear plActing variable
 AcStartNone:
@@ -1262,10 +1330,6 @@ ConsumeItem:
 10$:	swab	R0
 	mov	R0, Items(R1)
 	call	UpdateItems
-	return
-
-; nothing to act with
-ActingNone:
 	return
 
 ; spade acting
@@ -1362,6 +1426,9 @@ SpadeingTile:
 	call	BufTile
 	mov	#SND_SPADEING, R0
 	.ppexe	#CmdSoundPlay
+	mov	#4, R1
+	call	AddItem
+	call	UpdateItems
 	return
 
 ; make grass/dirt on tile depending on adjacent
@@ -1476,6 +1543,32 @@ UpdateItems:
 	clr	R1
 	clr	R2
 	call	BufSprite
+	; draw number of items
+	mov	varAddr, R5
+	inc	R5
+	clr	R0
+	bisb	(R5), R0			; R0 = number of items
+	cmp	R0, #1
+	ble	20$
+	cmp	R0, #9.
+	ble	12$
+	mov	#9., R0
+12$:	asl	R0
+	asl	R0
+	asl	R0
+	add	#SprNumbers45+80., R0
+	; put bits
+	mov	#BUFWID*10.+1+VBuffer1, R5
+	mov	#BUFWID, R2
+	bisb	(R0)+, (R5)
+	add	R2, R5
+	bisb	(R0)+, (R5)
+	add	R2, R5
+	bisb	(R0)+, (R5)
+	add	R2, R5
+	bisb	(R0)+, (R5)
+	add	R2, R5
+	bisb	(R0)+, (R5)
 	; now copy square from vbuffers to screen
 20$:	mov	varAddr3, R1
 	.ppexe	#CmdUpdItem
@@ -1505,7 +1598,7 @@ UpdateItems:
 	clr	R1
 	clr	R2
 	call	BufTile
-	; TODO: draw number of items
+	;
 	add	#SCRWID*21., varAddr3
 	add	#2, varAddr
 	cmp	varAddr, #Items+16.
@@ -1517,7 +1610,7 @@ UpdateItems:
 ProcItemKeys:
 	mov	#8., R1
 	mov	#Key8, R0
-10$:	tst	(R0)+			; test one key at (R0)
+10$:	tst	(R0)+				; test one key at (R0)
 	bne	30$
 	sob	R1, 10$
 	return
@@ -2028,6 +2121,9 @@ playerAni:	.word	0
 playerItem:	.word	1		; currently selected item slot [0..7]
 playerItemNew:	.word	1		; item slot to be selected on this frame
 
+plLightType:	.word	0		; type of light around player
+					; 0-none, 1-square light, 2-light all once, 3-light all always
+
 playerLife:	.word	0
 playerLifeMax:	.word	0
 playerLifeCur:	.word	0
@@ -2041,8 +2137,8 @@ PlayerObjectEnd:
 ; player item objects [0..7] (selected with 1..8), low byte - item #, high byte - item count
 Items:		.word	0, 0, 0, 0, 0, 0, 0, 0
 
-		;	0    1    2    3
-ItemBaseSpr:	.byte	00., 10., 11., 12.
+		;	0    1    2    3    4
+ItemBaseSpr:	.byte	00., 10., 11., 12., 13.
 		.even
 
 hitpointX:	.word	0		; hitting something at this point
@@ -2076,7 +2172,7 @@ EnemiesAttack:	.byte	8.		; spider 1
 		;	0  1  2  3  4  5  6  7  8  9
 TilesWeight:	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 0
 		.byte	7, 7, 7, 7, 0, 0, 0, 0, 0, 0	; 10
-		.byte	3, 0, 0, 0, 0, 3, 0, 3, 3, 0	; 20
+		.byte	3, 0, 0, 0, 0, 3, 3, 3, 3, 0	; 20
 		.byte	0, 0, 0, 0, 0, 0, 2, 0, 1, 1	; 30
 		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 40
 		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 50

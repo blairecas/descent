@@ -603,10 +603,10 @@ TilesAddr:
 	.BYTE	367, 367, 4, 4, 4, 4, 0, 0
 	.BYTE	177, 177, 100, 100, 100, 100, 0, 0
 ; 026
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	347, 367, 4, 4, 4, 4, 0, 0
+	.BYTE	17, 277, 60, 40, 40, 40, 0, 0
+	.BYTE	367, 343, 4, 6, 4, 4, 0, 0
+	.BYTE	177, 176, 100, 100, 100, 100, 0, 0
 ; 027
 	.BYTE	40, 40, 20, 20, 40, 10, 104, 20
 	.BYTE	2, 42, 1, 1, 200, 200, 100, 100
@@ -746,7 +746,7 @@ TilesAddr:
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 104, 104, 22, 201
 ; 055
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
@@ -1190,7 +1190,10 @@ SpritesData:
 	.word	77776, 17170, 77777, 7364, 77777, 7362, 37777, 3164
 	.word	17776, 170, 7174, 0, 70, 0
 ; 013
-	.word	0, 0
+	.word	7574, 30, 17774, 7014, 37774, 0, 37774, 0
+	.word	37774, 0, 37774, 30, 17776, 0, 17776, 0
+	.word	37776, 0, 37776, 0, 37776, 0, 17774, 0
+	.word	60, 0
 ; 014
 	.word	0, 0
 ; 015
@@ -1455,16 +1458,16 @@ SpritesData:
 
 SpritesAddr:
 	.word	SpritesData+0, SpritesData+100, SpritesData+174, SpritesData+274, SpritesData+370, SpritesData+464, SpritesData+564, SpritesData+660, SpritesData+754, SpritesData+1054
-	.word	SpritesData+1150, SpritesData+1240, SpritesData+1340, SpritesData+1434, SpritesData+1440, SpritesData+1444, SpritesData+1450, SpritesData+1454, SpritesData+1460, SpritesData+1464
-	.word	SpritesData+1470, SpritesData+1524, SpritesData+1574, SpritesData+1630, SpritesData+1700, SpritesData+1750, SpritesData+2014, SpritesData+2064, SpritesData+2130, SpritesData+2134
-	.word	SpritesData+2140, SpritesData+2234, SpritesData+2334, SpritesData+2430, SpritesData+2434, SpritesData+2440, SpritesData+2444, SpritesData+2450, SpritesData+2454, SpritesData+2460
-	.word	SpritesData+2464, SpritesData+2470, SpritesData+2474, SpritesData+2500, SpritesData+2504, SpritesData+2510, SpritesData+2514, SpritesData+2520, SpritesData+2524, SpritesData+2530
-	.word	SpritesData+2534, SpritesData+2540, SpritesData+2544, SpritesData+2550, SpritesData+2554, SpritesData+2560, SpritesData+2564, SpritesData+2570, SpritesData+2574, SpritesData+2600
-	.word	SpritesData+2604, SpritesData+2610, SpritesData+2614, SpritesData+2620, SpritesData+2624, SpritesData+2630, SpritesData+2634, SpritesData+2640, SpritesData+2644, SpritesData+2650
-	.word	SpritesData+2654, SpritesData+2660, SpritesData+2664, SpritesData+2670, SpritesData+2674, SpritesData+2700, SpritesData+2704, SpritesData+2710, SpritesData+2714, SpritesData+2720
-	.word	SpritesData+2724, SpritesData+2730, SpritesData+2734, SpritesData+2740, SpritesData+2744, SpritesData+2750, SpritesData+2754, SpritesData+2760, SpritesData+2764, SpritesData+2770
-	.word	SpritesData+2774, SpritesData+3000, SpritesData+3004, SpritesData+3010, SpritesData+3014, SpritesData+3020, SpritesData+3024, SpritesData+3030, SpritesData+3034, SpritesData+3040
-	.word	SpritesData+3044, SpritesData+3050, SpritesData+3054, SpritesData+3060, SpritesData+3064, SpritesData+3070, SpritesData+3074, SpritesData+3100, SpritesData+3104, SpritesData+3110
-	.word	SpritesData+3114, SpritesData+3120, SpritesData+3124, SpritesData+3130, SpritesData+3134, SpritesData+3140, SpritesData+3144, SpritesData+3150, SpritesData+3154, SpritesData+3160
-	.word	SpritesData+3164, SpritesData+3170, SpritesData+3174, SpritesData+3200, SpritesData+3204, SpritesData+3210, SpritesData+3214, SpritesData+3220, SpritesData+3224, SpritesData+3324
+	.word	SpritesData+1150, SpritesData+1240, SpritesData+1340, SpritesData+1434, SpritesData+1520, SpritesData+1524, SpritesData+1530, SpritesData+1534, SpritesData+1540, SpritesData+1544
+	.word	SpritesData+1550, SpritesData+1604, SpritesData+1654, SpritesData+1710, SpritesData+1760, SpritesData+2030, SpritesData+2074, SpritesData+2144, SpritesData+2210, SpritesData+2214
+	.word	SpritesData+2220, SpritesData+2314, SpritesData+2414, SpritesData+2510, SpritesData+2514, SpritesData+2520, SpritesData+2524, SpritesData+2530, SpritesData+2534, SpritesData+2540
+	.word	SpritesData+2544, SpritesData+2550, SpritesData+2554, SpritesData+2560, SpritesData+2564, SpritesData+2570, SpritesData+2574, SpritesData+2600, SpritesData+2604, SpritesData+2610
+	.word	SpritesData+2614, SpritesData+2620, SpritesData+2624, SpritesData+2630, SpritesData+2634, SpritesData+2640, SpritesData+2644, SpritesData+2650, SpritesData+2654, SpritesData+2660
+	.word	SpritesData+2664, SpritesData+2670, SpritesData+2674, SpritesData+2700, SpritesData+2704, SpritesData+2710, SpritesData+2714, SpritesData+2720, SpritesData+2724, SpritesData+2730
+	.word	SpritesData+2734, SpritesData+2740, SpritesData+2744, SpritesData+2750, SpritesData+2754, SpritesData+2760, SpritesData+2764, SpritesData+2770, SpritesData+2774, SpritesData+3000
+	.word	SpritesData+3004, SpritesData+3010, SpritesData+3014, SpritesData+3020, SpritesData+3024, SpritesData+3030, SpritesData+3034, SpritesData+3040, SpritesData+3044, SpritesData+3050
+	.word	SpritesData+3054, SpritesData+3060, SpritesData+3064, SpritesData+3070, SpritesData+3074, SpritesData+3100, SpritesData+3104, SpritesData+3110, SpritesData+3114, SpritesData+3120
+	.word	SpritesData+3124, SpritesData+3130, SpritesData+3134, SpritesData+3140, SpritesData+3144, SpritesData+3150, SpritesData+3154, SpritesData+3160, SpritesData+3164, SpritesData+3170
+	.word	SpritesData+3174, SpritesData+3200, SpritesData+3204, SpritesData+3210, SpritesData+3214, SpritesData+3220, SpritesData+3224, SpritesData+3230, SpritesData+3234, SpritesData+3240
+	.word	SpritesData+3244, SpritesData+3250, SpritesData+3254, SpritesData+3260, SpritesData+3264, SpritesData+3270, SpritesData+3274, SpritesData+3300, SpritesData+3304, SpritesData+3404
 

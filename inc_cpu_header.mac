@@ -2,6 +2,8 @@
 ; // CPU header for .=0
 ; /////////////////////////////////////////////////////////////////////
 
+RetFunc = 0
+
 ; 000000 - CPU RAM start
 	.WORD	000207, 0, RTIADR, 0, RTIADR, 0, RTIADR, 0, RTIADR, 0, RTIADR, 0, RTIADR, 0, RTIADR, 0	; 000000-000040
 	.WORD	RTIADR, 0, RTIADR, 0, RTIADR, 0, RTIADR, 0, RTIADR, 0, RTIADR, 0, RTIADR, 0, RTIADR, 0	; 000040-000100	
