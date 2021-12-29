@@ -297,6 +297,45 @@ PrintMsg:
 100$:	.byte	0, ^B00000001, ^B00000011, ^B00000111, ^B00001111, ^B00011111, ^B00111111, ^B01111111
 
 
+; prints 2-digits number
+; R0 - number, R1 - x*8, R2 - y
+Print2Dec:
+	; clear 2 chars
+	mov	R1, -(SP)		; save coords
+	mov	R2, -(SP)
+	call	Coords8ToVaddr		; R1 = vaddr
+	call	SetVReg			; set vregs
+	mov	#177014, R2		; planes 1,2 vreg
+	mov	R1, (R4)		; set vaddr
+	mov	#8., R3			; height is 8
+	mov	#SCRWID-1, R1
+10$:	clr	(R5)
+	clr	(R2)
+	inc	(R4)
+;	clr	(R5)
+;	clr	(R2)
+;	inc	(R4)
+	clr	(R5)
+	clr	(R2)
+	add	R1, (R4)
+	sob	R3, 10$
+	; print 2 chars
+	mov	R0, R1
+	clr	R0	
+	div	#10., R0		; R0 = R0/10, R1 = R0%10
+	add	#'0, R0			; convert to chars
+	add	#'0, R1
+	movb	R0, 100$+1
+	movb	R1, 100$+2
+	mov	(SP)+, R2
+	mov	(SP)+, R1
+	mov	#100$, R0
+	call	PrintStr
+	return
+100$:	.asciz	<3>"00"
+	.even
+
+
 ; //////////////////////////////////////////////////////////////////////////////
 ; // SPRITE UTILS
 ; //////////////////////////////////////////////////////////////////////////////

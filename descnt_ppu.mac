@@ -122,6 +122,7 @@ CommandsTable:
 	.word	DrawLifeBgr		; 25. draw player life bar background
 	.word	DrawLifeCur		; 26. draw player life line
 	.word	ClrScrBottom		; 27. clear last 12 lines of screen vmem
+	.word	Print2Dec		; 28. prints 2-digits decimal
 
 	
 ; //////////////////////////////////////////////////////////////////////////////
@@ -206,7 +207,7 @@ SNDADR:	.word	0
 ; music list addrs
 MUSTAB:	.word	0, MUS001
 ; sound list addrs
-SNDTAB:	.word	0, SND001, SND002, SND003
+SNDTAB:	.word	0, SND001, SND002, SND003, SND004
 
 .radix 10
 
@@ -282,12 +283,12 @@ SndIntLo:
 	dec	SndTCnt
 	bpl	90$
 	; try next effect
-	;mov	R0, -(SP)
-	;mov	SNDADR, R0
-	;call	SndSetVars
-	;mov	(SP)+, R0
-	;tst	SndType
-	;bne	90$
+	mov	R0, -(SP)
+	mov	SNDADR, R0
+	call	SndSetVars
+	mov	(SP)+, R0
+	tst	SndType
+	bne	90$
 	; no next effect - stop timer
 	clr	@#177710
 	tst	@#177714
@@ -909,7 +910,10 @@ SND002:	.word	SND_TONE, 05, 01*256, 0, 20*256, +02*256,  200*256, -30*256
 ; add item
 SND003:	.word	SND_TONE, 04, 25*256, -4*256, 80*256, 40*256, 70*256, 40*256
 	.word	0
-
+; eat item
+SND004:	.word	SND_TONE, 06, 10*256, -1*256, 100*256, 20*256, 10*256, 40*256
+	.word	SND_TONE, 04, 2*256, 2*256, 240*256, -20*256, 240*256, -40*256
+	.word	0
 
 .radix 8
 
@@ -918,7 +922,7 @@ SND003:	.word	SND_TONE, 04, 25*256, -4*256, 80*256, 40*256, 70*256, 40*256
 
 @include inc_ppu_sprites.mac	
 
-TxtTable:	.word	TXT_Menu00, TXT_Menu01, TXT_Menu02, TXT_Menu03, TXT_Menu04, TXT_MENU05, TXT_Menu06, TXT_Test1, TXT_Pre_Intro, TXT_Msg1
+TxtTable:	.word	TXT_Menu00, TXT_Menu01, TXT_Menu02, TXT_Menu03, TXT_Menu04, TXT_MENU05, TXT_Menu06, TXT_Menu07, TXT_Pre_Intro, TXT_Msg1
 		.word	TXT_Msg2, TXT_Game_Over
 
 
@@ -950,9 +954,8 @@ TXT_Menu02:	.asciz	<7>" РЕГ"<5>" - "<6>"Использовать"
 TXT_Menu03:	.asciz	<7>"  К1"<5>" - "<6>"Палитра "<4>"R"<2>"G"<1>"B"<6>"/"<2>"G"<4>"R"<1>"B"
 TXT_Menu04:	.asciz	<7>" УСТ"<5>" - "<6>"Пауза"
 TXT_Menu05:	.asciz	<7>"СТОП"<5>" - "<6>"Сброс игры"
-TXT_Menu06:	.asciz	<6>" НАЖМИТЕ "<7>"ПРОБЕЛ"
-
-TXT_Test1:	.asciz	<2>"Тест"
+TXT_Menu06:	.asciz	<7>" <>`"<5>" - "<6>"Тест звука:"
+TXT_Menu07:	.asciz	<6>" НАЖМИТЕ "<7>"ПРОБЕЛ"
 
 TXT_Pre_Intro:	.asciz	<7>"═╡ Ночная смена ╞═"
 TXT_Game_Over:	.asciz	<7>"Тут и сказочке конец"

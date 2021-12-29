@@ -80,7 +80,7 @@ MenuTbl00:	.byte	00., 04., 30., 04., 31., 04., 00.
 ; Menu Texts - X, Y, Id, 1|2x ...
 MenuTbl10:	.byte	013., 110., 00.,	013., 120., 01.,	013., 130., 02.
 		.byte	013., 145., 03.,	013., 155., 04.,	013., 165., 05.
-		.byte	014., 185., 06.,	0
+		.byte	013., 180., 06., 	014., 200., 07.,	0
 		.even
 
 ; called after game reset - reset vars and draw main menu
@@ -90,6 +90,7 @@ MainReset:
 	call	ClearScreen		; clear screen planes-1,2
 	; variables from reset
 	mov	#2., VSyncX		; game speed - #2 of 50Hz sync interrupt (25fps)
+	mov	#1., TestSoundNum
 	; screen prepare (clear)
 	mov	#VADDR, R0		; reset lines table addrs (if stopped in a middle of changing)
 	.ppexe	#CmdLinesFromR0	
@@ -122,6 +123,8 @@ MainReset:
 	mov	#160000-END, R0		; free CPU RAM
 	mov	#400000-ENDVram12, R4	; free VRAM12
 	.ppexe	#CmdDebugString
+	; test sound number
+	call	PrintSoundNum
 	; go main menu
 	inc	CurrentMode		; -> 1 (MainMenu)
 	return
@@ -156,7 +159,31 @@ MainMenu:
 24$:	mov	PlayerAni, R0
 	movb	SPPAniTable(R0), R0
 	add	R0, PlayerSpr
-30$:	; ----------------------
+30$:	; sound test start
+	tst	KeyLeft
+	beq	40$
+	clr	KeyLeft
+	dec	TestSoundNum
+	bne	46$
+	inc	TestSoundNum
+	br	46$
+40$:	tst	KeyRight
+	beq	42$
+	clr	KeyRight
+	inc	TestSoundNum
+	cmp	TestSoundNum, #SND_MAX
+	ble	46$
+	dec	TestSoundNum
+	br	46$
+42$:	tst	KeyDown
+	beq	50$
+	clr	KeyDown
+	mov	TestSoundNum, R0
+	.ppexe	#CmdSoundPlay
+	br	50$
+46$:	call	PrintSoundNum
+50$:	; sound test end
+	; ----------------------
 	; test for start key
 	tst	KeySpace
 	beq	99$
@@ -252,6 +279,8 @@ MainGame:
 	; test for game over
 	tst	playerLife
 	bgt	99$
+	tst	DebugMode		; continue if debug
+	bne	99$
 	call	DrawPlayerLife		; draw life at zero
 	call	PrepareFade
 	inc	CurrentMode		; next mode - fade out screen
@@ -1316,6 +1345,8 @@ AcStartHealth:
 90$:	; consume item
 	call	ConsumeItem			; consume health item
  	clr	plActing			; clear acting state as it already happened
+	mov	#SND_EAT, R0			; 'eat' sound
+	.ppexe	#CmdSoundPlay
 	return
 
 ; decrease item count and clear if zero
@@ -1544,13 +1575,13 @@ UpdateItems:
 	clr	R2
 	call	BufSprite
 	; draw number of items
-	mov	varAddr, R5
-	inc	R5
+	mov	varAddr, R5			; addr of [count | item #]
+	inc	R5				; R5 = count byte addr
 	clr	R0
 	bisb	(R5), R0			; R0 = number of items
-	cmp	R0, #1
+	cmp	R0, #1				; do not draw 1
 	ble	20$
-	cmp	R0, #9.
+	cmp	R0, #9.				; max number is 9
 	ble	12$
 	mov	#9., R0
 12$:	asl	R0
@@ -2044,14 +2075,14 @@ CheckStop:
 	clr	CurrentMode		; reset mode
 99$:	return
 
-; key K2 - debug on|off (and restart)
+; key combo - debug on|off (and restart)
 CheckDebug:
-	tst	KeyK2
+	tst	KeyCombo
 	beq	99$
-	clr	KeyK2			; release K2
+	clr	KeyCombo		; release K2
 	clr	Pause			; unpause
 	com	DebugMode		; debug on|off
-	clr	CurrentMode		; reset mode
+	clr	CurrentMode		; reset game
 99$:	return
 
 ; 'empty' interrupt
@@ -2078,7 +2109,9 @@ Pause:		.WORD	0	; <>0 - paused
 
 CurrentMode:	.WORD	0	; game mode (0-reset, 1-menu.. etc)
 RgbMode:	.WORD	0	; RGB/GRB switch
-DebugMode:	.WORD	177777	; debug mode switch
+DebugMode:	.WORD	0	; debug mode switch
+
+TestSoundNum:	.word	1	; sound test number
 
 glevelX:	.byte	0
 glevelY:	.byte	0

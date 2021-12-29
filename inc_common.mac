@@ -29,6 +29,7 @@ CmdUnpackLevels   = 24.		; unpack levels data PPU vram -> CPU vram
 CmdDrawLifeBgr    = 25.		; draws player life bar background
 CmdDrawLifeCur    = 26.		; draws current life line
 CmdClrScrBottom   = 27.		; clear last 12 lines of screen vmem
+CmdPrint2Dec      = 28.		; prints 2-digits decimal
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -83,6 +84,7 @@ TSUB_SPIDER1	= 0
 ITEM_LIGHT	= 1
 ITEM_SPADE	= 2
 ITEM_CHERRY	= 3
+ITEM_ORE	= 4
 
 TRIG_APPR	= 1		; approach trigger, arg0 = approach max distance by x or y
 
@@ -105,6 +107,9 @@ EVNT_MSG2	= 2
 SND_JUMP	= 1
 SND_SPADEING	= 2
 SND_ADDITEM	= 3
+SND_EAT		= 4
+
+SND_MAX		= 4
 
 ; //////////////////////////////////////////////////////////////////////////////	
 ; // CPU<->PPU exchange variables
