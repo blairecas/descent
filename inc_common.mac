@@ -58,7 +58,7 @@ CLV_LOCAL_DX = 15.	; for reference only, can't be changed
 CLV_LOCAL_DY = 13.	; because of heavy using nibbles for level coordinates
 
 CGL_LEV_DX = 4
-CGL_LEV_DY = 20.
+CGL_LEV_DY = 16.
 
 CGL_DX = CGL_LEV_DX * CLV_LOCAL_DX + 1
 CGL_DY = CGL_LEV_DY * CLV_LOCAL_DY + 1
@@ -86,7 +86,9 @@ ITEM_SPADE	= 2
 ITEM_CHERRY	= 3
 ITEM_ORE	= 4
 
-TRIG_APPR	= 1		; approach trigger, arg0 = approach max distance by x or y
+; trigger subtypes
+TRIG_APPR	= 1		; approach trigger, arg0 = event #, arg1 = approach max distance by x or y
+TRIG_EP_NXT	= 2		; next episode trigger on approach, arg1 = max distance
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -95,9 +97,12 @@ TRIG_APPR	= 1		; approach trigger, arg0 = approach max distance by x or y
 
 EVC_CLR		= 1
 EVC_MSG		= 2
+EVC_EPIS0_CHK	= 3
 
-EVNT_MSG1	= 1
-EVNT_MSG2	= 2
+EVNT_MSG1	= 1		; show message #9.
+EVNT_MSG2	= 2		; show message #10.
+EVNT_EPIS0_CHK	= 3		; sink boulders and check for episode #0 end
+EVNT_MSG3	= 4		; ep01 Yana's message
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -108,8 +113,21 @@ SND_JUMP	= 1
 SND_SPADEING	= 2
 SND_ADDITEM	= 3
 SND_EAT		= 4
+SND_REMOVEITEM	= 5
 
-SND_MAX		= 4
+SND_MAX		= 5
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Text strings IDs
+; //////////////////////////////////////////////////////////////////////////////
+
+TXTID_GAMEOVER  = 11.
+TXTID_EP0MSG	= 8.
+TXTID_EP0END	= 13.
+TXTID_EP1MSG	= 14.
+TXTID_EP2MSG	= 15.
+TXTID_YANA01	= 16.
+
 
 ; //////////////////////////////////////////////////////////////////////////////	
 ; // CPU<->PPU exchange variables

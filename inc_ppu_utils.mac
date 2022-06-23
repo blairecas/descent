@@ -142,6 +142,7 @@ PrintMsgDY:	.word	0		; message DY
 PrintMsgDX8:	.word	0		; message DX in 8-pix truncated
 PrintMsgDX8r:	.word	0		; message DX reminder within 8-pix
 PrintSIVA:	.word	0		; initial vline addr for using CR in text
+PrintBrdrCol:	.word	0		; border color for message - first byte in message (if <= 7, else 7)
 
 ; get DX & DY of text
 PrintSetDXDY:
@@ -179,18 +180,24 @@ PrintPrepare:
 	call	PrintGetR0		; R0=text address
 	mov	R0, -(SP)		; save it
 	mov	R0, (R4)		; set vaddr for text
-	call	PrintSetDXDY		; set text size in PrintMsgDX, PrintMsgDY
+	; set border color
+	movb	(R5), PrintBrdrCol	; vdata first byte usually is a color byte
+	cmpb	PrintBrdrCol, #7	; but if not - set color to 7
+	blos	2$
+	movb	#7, PrintBrdrCol
+2$:	; set text size in PrintMsgDX, PrintMsgDY
+	call	PrintSetDXDY
 	mov	(SP)+, (R4)
 	; set vbuffer as output buffer
 	mov	#VBuffer0, R2
 	; first line
-	movb	#7, (R2)+		; white color for border
-	movb	#'¥, (R2)+		; +
+	movb	PrintBrdrCol, (R2)+	; border color
+	movb	#'‚, (R2)+		; +
 	call	PrintDXLine		; =
-	movb	#'¨, (R2)+		; +
+	movb	#'ƒ, (R2)+		; +
 	movb	#10., (R2)+		; CR
 	; main message block
-10$:	movb	#'¡, (R2)+
+10$:	movb	#', (R2)+
 	clr	R1			; current line X
 20$:	mov	(R5), R0		; get character
 	beq	30$			; end?
@@ -209,16 +216,16 @@ PrintPrepare:
 	movb	#32., (R2)+
 	inc	R1
 	br	30$
-50$:	movb	#7, (R2)+		; white color for border
-	movb	#'¡, (R2)+
+50$:	movb	PrintBrdrCol, (R2)+	; border color
+	movb	#', (R2)+
 	movb	#10., (R2)+
 	tst	R0			; end of message?
 	bne	10$			; no - repeat for next line
 	; end of message line
-	movb	#7, (R2)+		; white color for border
-	movb	#'«, (R2)+
+	movb	PrintBrdrCol, (R2)+	; border color
+	movb	#'„, (R2)+
 	call	PrintDXLine
-	movb	#'®, (R2)+
+	movb	#'…, (R2)+
 	clrb	(R2)			; set end of message
 	; adjust DX, DY with border
 	add	#2, PrintMsgDX
@@ -233,7 +240,7 @@ PrintPrepare:
 ; set line of = chars to (R2)+
 PrintDXLine:
 	mov	PrintMsgDX, R3
-10$:	movb	#' , (R2)+
+10$:	movb	#'€, (R2)+
 	sob	R3, 10$
 	return
 

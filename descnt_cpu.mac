@@ -58,8 +58,8 @@ MainCycle:
 	tst	KeyUst
 	beq	10$
 	clr	KeyUst
-	com	Pause
-10$:	tst	Pause
+	comb	Pause
+10$:	tstb	Pause
 	bne	MainCycle
 	; run procedures
 	mov	CurrentMode, R0
@@ -70,7 +70,7 @@ MainCycle:
 	jmp	MainCycle
 
 MainCycleTable:	
-	.WORD	MainReset, MainMenu, MainPrepare, MainScreenUp, MainGame, MainOverPrepare, MainOver
+	.WORD	MainReset, MainMenu, MainClearPrepare, MainEpisodePrepare, MainScreenUp, MainEpisodeBeforePlay, MainGame, MainFadeOut, MainOverPrepare, MainOver, MainNextEpisode
 
 
 ; Menu Tiles - X, Y, Id1, Id2, Id3 ... 255. then again till Id=0
@@ -83,14 +83,15 @@ MenuTbl10:	.byte	013., 110., 00.,	013., 120., 01.,	013., 130., 02.
 		.byte	013., 180., 06., 	014., 200., 07.,	0
 		.even
 
-; called after game reset - reset vars and draw main menu
+; 0 - called after game reset - reset vars and draw main menu
 MainReset:
 	clr	R0
 	.ppexe	#CmdFillScreen		; clear screen plane-0
 	call	ClearScreen		; clear screen planes-1,2
 	; variables from reset
 	mov	#2., VSyncX		; game speed - #2 of 50Hz sync interrupt (25fps)
-	mov	#1., TestSoundNum
+	movb	#1., TestSoundNum
+	clrb	EpisodeDream		; must be cleared to draw full-colored sprites
 	; screen prepare (clear)
 	mov	#VADDR, R0		; reset lines table addrs (if stopped in a middle of changing)
 	.ppexe	#CmdLinesFromR0	
@@ -112,6 +113,7 @@ MainReset:
 	clr	PlayerDir
 	clr	PlayerAni
 	mov	#2., PlayerSpr
+	clr	plActing
 	call	RedrawFull
 	; controls text
 	mov	#MenuTbl10, varAddr
@@ -130,7 +132,7 @@ MainReset:
 	return
 
 
-; main menu processing
+; 1 - main menu processing
 MainMenu:
 	; --- player walking ---
 	mov	#playerObject, R0
@@ -163,22 +165,21 @@ MainMenu:
 	tst	KeyLeft
 	beq	40$
 	clr	KeyLeft
-	dec	TestSoundNum
+	decb	TestSoundNum
 	bne	46$
-	inc	TestSoundNum
+	incb	TestSoundNum
 	br	46$
 40$:	tst	KeyRight
 	beq	42$
 	clr	KeyRight
-	inc	TestSoundNum
-	cmp	TestSoundNum, #SND_MAX
-	ble	46$
-	dec	TestSoundNum
+	cmpb	TestSoundNum, #SND_MAX
+	bge	46$
+	incb	TestSoundNum
 	br	46$
 42$:	tst	KeyDown
 	beq	50$
 	clr	KeyDown
-	mov	TestSoundNum, R0
+	movb	TestSoundNum, R0	; i don't think there will be more than 127 sounds
 	.ppexe	#CmdSoundPlay
 	br	50$
 46$:	call	PrintSoundNum
@@ -189,32 +190,16 @@ MainMenu:
 	beq	99$
 	; go game prepare
 	clr	KeySpace
-	inc	CurrentMode		; ->2 (MainPrepare)
+	clr	Episode
+	inc	CurrentMode		; ->2 (MainClearPrepare)
 99$:	return
 
 
-; game prepare
-MainPrepare:
+; 2 - clear start vars prepare
+MainClearPrepare:
 	.ppexe	#CmdClrScrBottom
 	.ppexe	#CmdHideScreen		; hide anything going on screen
-	; player vars prepare
-	mov	#playerObject, R0
-	mov	#playerObjectEnd-playerObject/2, R3
-	clr	(R0)+
-	sob	R3, .-2
-	mov	#PLSWALKING, playerState
-	mov	#200., playerX
-	mov	#048., playerY
-	inc	playerDir
-	clr	playerAni
-	mov	#5., playerSpr
-	clr	playerItemNew
-	mov	#63., playerLife
-	mov	#63., playerLifeMax
-	clr	playerLifeCur
-	clr	plLightType
-	inc	plLightType		; DEBUG - delete this
-	; stage text output
+	; episode 0 text output
 	mov	#8., R0
 	mov	#14., R1
 	mov	#288., R2
@@ -226,10 +211,17 @@ MainPrepare:
 	; while PPU is unpacking - prepare screen background in CPU
 	call	ClearScreen		; clear screen planes 1,2
 	call	ScreenBackground	; fill with ////
+	; clear player vars
+	mov	#playerObject, R0
+	mov	#playerObjectEnd-playerObject/2, R3
+	clr	(R0)+
+	sob	R3, .-2
+	mov	#63., playerLifeMax	; set player life max for drawing box
+	clr	playerLifeCur		; current life meter (not actual life)
 	; TODO: some lenghty operations can be done here
 	; wait for unpacking to finish 
 	call	PpuWait
-	; leve is unpacked but it's with dirty high-bytes
+	; level is unpacked but it's with dirty high-bytes
 	; fill screen plane 0
 	mov	#177777, R0
 	.ppexe	#CmdFillScreen
@@ -238,14 +230,45 @@ MainPrepare:
 	; finish drawing
 	call	DrawFieldBorder		; prepare game borders & item boxes
 	call	ClearItems
+	;
+	inc	CurrentMode		; -> MainEpisodePrepare
+	return
+
+
+; 3 - game episode prepare
+MainEpisodePrepare:
+	; modify global level according to episode (add|del obj, make passages etc)
+	cmp	Episode, #2
+	bne	20$
+	; episode 2 - change boss to flashlight, remove light message, open door
+	mov	#ChgObjE0201, R5	; replace boss to flashlight
+	call	ChangeGlobalObject
+	mov	#ChgObjE0202, R5	; remove light message
+	call	ChangeGlobalObject
+20$:	; episode variables
+	mov	Episode, R0
+	movb	EListDream(R0), EpisodeDream	; dreaming episodes?
+	; player vars prepare
+	clr	playerX
+	clr	playerY
+	movb	EListPlayerX(R0), playerX
+	movb	EListPlayerY(R0), playerY
+	movb	EListPlayerDir(R0), playerDir
+	movb	EListPlayerSpr(R0), playerSpr
+	mov	#PLSWALKING, playerState
+	clr	playerAni
+	clr	playerItemNew
+	mov	playerLifeMax, playerLife
+	; init level field (global->local)
+	clr	glevelX				; glevelX = 377 - not initialized
+	dec	glevelX				; glevelY = 377
+	movb	EListGlevX(R0), glevelNewX	; new global level coords
+	movb	EListGlevY(R0), glevelNewY	;
+	; vars init complete
+	call	InitLevelField		; init level
+	; update item box (needed if dream state was changed)
 	call	UpdateItems		; draw player items
 	call	SelectNewItem
-	; init level field (global->local)
-	clr	glevelX			; glevelX = 377 - not initialized
-	dec	glevelX			; glevelY = 377
-	clrb	glevelNewX		; first level coords
-	clrb	glevelNewY		;
-	call	InitLevelField		; init level
 	; go show screen
 	call	RedrawFull
 	call	PrepareFade
@@ -253,18 +276,33 @@ MainPrepare:
 	return
 
 
-; make screen appear
+; 4 - make screen appear
 MainScreenUp:
 	call	FadeInOutTick
 	.ppexe	#CmdFadeInScreen
 	cmp	varY, #144.
 	blo	10$
 	mov	#2., VSyncX		; slow down to 25fps
-	inc	CurrentMode		; next mode -> game main
+	inc	CurrentMode		; next mode -> game post prepare episode
 10$:	return
+
+
+; 5 - last preparations before episode play
+MainEpisodeBeforePlay:
+	tst	Episode
+	bne	10$
+	clr	EpisodeVar0		; it's a boulders count at boss 0 for episode 0
+	clr	EpisodeVar1		; >0 = can speak after get boulders
+	; episode #0 - show message 
+	; R1=[obj type][obj subtype], R5=msg #
+	mov	#TOBJ_FRIEND*256.+TSUB_BOSS, R1
+	mov	#9., R5
+	call	EventShowMessage
+10$:	inc	CurrentMode		; next mode - > main game cycle
+	return
+
 	
-	
-; game processing
+; 6 - game processing
 MainGame:
 	call	DrawPlayerLife
 	call	BufAllSprites
@@ -279,35 +317,59 @@ MainGame:
 	; test for game over
 	tst	playerLife
 	bgt	99$
-	tst	DebugMode		; continue if debug
+	tstb	DebugMode		; continue if debug
 	bne	99$
-	call	DrawPlayerLife		; draw life at zero
+	call	DrawPlayerLife		; draw life at zero just in case
+	mov	#-1, Episode		; -1 is a game over
 	call	PrepareFade
 	inc	CurrentMode		; next mode - fade out screen
 99$:	return
 
 
-; game over prepare
-MainOverPrepare:
+; 7 - fade out screen
+MainFadeOut:
 	call	FadeInOutTick
 	.ppexe	#CmdFadeOutScreen
 	cmp	varY, #144.
-	blo	10$
+	blo	90$
 	.ppexe	#CmdClrScrBottom
 	.ppexe	#CmdHideScreen		; hide anything going on screen
-	mov	#11., R0		; game over text output
+	inc	CurrentMode
+90$:	return
+
+
+; 8. - end of episode or game over prepare
+MainOverPrepare:
+	; print next episode message (or game over)
+	mov	Episode, R1
+	clr	R0
+	bisb	EListMsg(R1), R0
 	mov	#13., R1
 	mov	#288., R2
 	.ppexe	#CmdPrintStr
-	inc	CurrentMode
-10$:	return
+	; game over or not?
+	tst	Episode
+	bmi	85$
+	call	CopyLocalGlobal		; copy changed level tiles/objects back to vram12
+	inc	CurrentMode		; +2 is next episode
+85$:	inc	CurrentMode
+90$:	return
 
 
-; game over
+; 9. - game over
 MainOver:
 	dec	varY
 	bgt	99$
 	clr	CurrentMode
+99$:	return
+
+
+; 10. - next episode transition
+MainNextEpisode:
+	dec	varY
+	bgt	99$
+	call	PrepareFade		; next will be fade in screen
+	mov	#3., CurrentMode	; next episode prepare
 99$:	return
 
 
@@ -328,6 +390,14 @@ FadeInOutTick:
 	bhis	2$
 	inc	varDY
 2$:	mov	varY, R0
+	return
+
+
+; next episode preparation
+NextEpisode:
+	inc	Episode			; next episode
+	call	PrepareFade		; prepare fadeout vars
+	inc	CurrentMode		; set next game mode to fade out
 	return
 
 
@@ -580,7 +650,7 @@ CopyGlobalLocal:
 	asrb	R0
 	bic	#^B1111100011100000, R0
 	swab	R0
-	mov	R0, (R2)+		; store [type | subtype] at object word 1
+	mov	R0, (R2)+		; store [subtype | type] at object word 1
 	call	GetB12			; R0 = argument #0 (spr#)
 	clr	R1
 	bisb	R0, R1
@@ -696,11 +766,11 @@ InitTilesWeight:
 	mov	#GlobalLevel-200000, R0
 	sec
 	ror	R0
-	mov	R0, -(SP)		; save to stack, don't forget to restore
-	mov	R0, (R4)
+	mov	R0, -(SP)		; (!) save to stack, don't forget to restore
+	mov	R0, (R4)		; vaddr -> (R4) 176640
 	mov	#CGL_DY*CGL_DX, R3
 10$:	mov	(R5), R0
-	bic	#^B1111111100000000, R0
+	bic	#^B1111111100000000, R0	; clear level tile attributes
 	clr	R1
 	bisb	TilesWeight(R0), R1
 	swab	R1
@@ -735,6 +805,28 @@ InitLevelField:
 10$:	movb	glevelNewX, glevelX
 	movb	glevelNewY, glevelY
 	call	CopyGlobalLocal		; read level from vram
+	return
+
+
+; make changes in global objects (for episode transitions)
+; R5 - change object sequence (glx, gly, objnum, [type|subtype], arg#0, arg#1, coords)
+ChangeGlobalObject:
+	movb	(R5)+, glevelX
+	movb	(R5)+, glevelY
+	call	PrepareCopyObjects	; -> R1 - GlobalObj for level 0,0 (relative)
+	movb	(R5)+, R0		; objnum -> R0 (not need to clear high-byte)
+	asl	R0			; TODO? *COBJ_LEN?
+	asl	R0
+	add	R0, R1
+	mov	R1, PutA12		; TOBJ_ITEM*32+ITEM_LIGHT,spr#,0,y*16+x
+	movb	(R5)+, R1		; [type|subtype] (type is 3-bits, subtype-5bits)
+	call	PutB12
+	movb	(R5)+, R1		; arg#0
+	call	PutB12
+	movb	(R5)+, R1		; arg#1
+	call	PutB12
+	movb	(R5)+, R1		; coords
+	call	PutB12
 	return
 
 
@@ -1212,7 +1304,7 @@ PLightLevel:
 PStateTable:
 	.word	PlayerWalking, PlayerFalling, PlayerJumping, PlayerClimbing, PlayerDying
 PLightTable:
-	.word	RetFunc, PLightSquare, PLightLevel, RetFunc
+	.word	PLightSquare, RetFunc
 
 ; main process player function
 ProcessPlayer:
@@ -1555,6 +1647,25 @@ AddItem:
 	return
 
 
+; find and remove item, R1 - item ID
+; returns removed items count -> R0
+RemoveItem:
+	mov	#Items, R2
+	mov	#8., R3
+	clr	R0
+10$:	; check if we have item
+	cmpb	(R2)+, R1		; is this needed item?
+	bne	20$
+	bisb	(R2), R0		; put items count to R0
+	dec	R2			; and clear both
+	clr	(R2)			; item and count
+	br	90$
+20$:	inc	R2
+	sob	R3, 10$
+90$:	tst	R0			; to set flags
+	return
+
+
 ; update player items on screen
 UpdateItems:
 	mov	#Items, varAddr		; item 
@@ -1668,6 +1779,8 @@ SelectNewItem:
 ; // Objects
 ; //////////////////////////////////////////////////////////////////////////////
 
+; Object data: [subtype | type], [arg #1 | arg #0], [? X], [? Y]
+
 ; buffer objects (not all objects need drawing, e.g. triggers)
 BufferObjects:
 	mov	#LevelObj, R0
@@ -1753,14 +1866,14 @@ ProcObjItem:
 ProcObjFriend:
 	return
 
-; trigger object
+; trigger object, R0=addr of object, R1=TOBJ_TRIG, R2=trigger subtype
 ProcObjTrig:
 	; get minimal distance from trigger center to player
-	mov	4(R0), R4
+	mov	4(R0), R4		; object X
 	sub	playerX, R4
 	bpl	10$
 	neg	R4
-10$:	mov	6(R0), R5
+10$:	mov	6(R0), R5		; object Y
 	sub	playerY, R5
 	bpl	20$
 	neg	R5
@@ -1768,11 +1881,20 @@ ProcObjTrig:
 	blo	30$
 	mov	R4, R5
 30$:	; R5 = max distance by X or Y
-	cmp	R5, #12.		; TODO: check against variable distance
+	mov	2(R0), R1		; R1 = [arg #1 | arg #0]
+	clrb	R1
+	swab	R1			; R1 = arg #1 (distance for triggers)
+	cmp	R5, R1			; check for distance
 	ble	50$
 	return
-50$:	clr	R1
-	bisb	2(R0), R1		; R1 = arg #0	
+50$:	; if trigger is next episode (trigger subtype)
+	cmp	R2, #TRIG_EP_NXT
+	bne	60$
+	call	NextEpisode
+	return	
+60$:	; if trigger is event
+	clr	R1
+	bisb	2(R0), R1		; R1 = arg #0 - event #
 	call	RunEvent
 	return
 
@@ -1858,7 +1980,7 @@ ProcSpider1:
 20$:	add	#2, 4(R5)
 	return
 50$:	; move left
-	cmp	R1, #2				; left screen boundary +2px
+	cmp	R1, #10.			; left screen boundary +10px (spider can't stay on leftmost tile)
 	ble	58$
 	dec	R1
 	dec	R1
@@ -1929,7 +2051,7 @@ CheckIntersectY:
 ; //////////////////////////////////////////////////////////////////////////////
 
 
-; runs game event, R1=event #
+; runs game event, R1=event #, R0-object addr
 ;
 RunEvent:
 	call	SetVreg
@@ -1947,7 +2069,7 @@ RunEvent:
 20$:	cmpb	R0, #EVC_MSG
 	bne	30$
 	call	GetB12			; R0=msg #
-	mov	R0, R5			; save it for now
+	mov	R0, R5			; R5=msg #
 	call	GetB12			; R0=obj type
 	mov	R0, R1
 	swab	R1
@@ -1955,22 +2077,63 @@ RunEvent:
 	call	GetB12			; R0=obj subtype
 	bisb	R0, R1
 	swab	R1			; R1=[obj type][obj subtype]
+	call	EventShowMessage
+	br	10$
+30$:	cmpb	R0, #EVC_EPIS0_CHK
+	bne	40$
+	call	Episode0EndCheck
+	bcc	10$
+	mov	(SP), R0		; clear trigger object 
+	clr	(R0)			; if episode #0 complete
+	call	NextEpisode
+	br	99$
+40$:	; unknown event # - exiting cycle
+99$:	tst	(SP)+
+	return
+
+; show message for events (or just show it)
+; R1=[obj type][obj subtype], R5=msg #
+EventShowMessage:
 	; try to find such object 
-	call	ObjFindByType		; R0=obj addr or #playerObj if notfound
+	call	ObjFindByType		; returns R0=obj addr or #playerObj if notfound
 	mov	4(R0), R1		; X coord in buffer
 	ash	#-3, R1			; make it 8-pix
 	add	#FieldX, R1		; adjust with buffer X-position
 	mov	6(R0), R2		; Y coord in buffer
 	add	#FieldY, R2		; adjust with buffer Y-position
-	mov	R5, R0			; restore msg #
+	mov	R5, R0			; R0 - msg #
 	.ppexe	#CmdPrintMsg
 	clr	KeyAny			; wait for
 	tst	KeyAny			; press 'anykey'
 	beq	.-4
 	call	RedrawFull
-	br	10$
-30$:
-99$:	tst	(SP)+
+	return
+
+; decrease boulder count and check for episode 0 end
+; returns C - flag - episode complete
+Episode0EndCheck:
+	mov	#4, R1
+	call	RemoveItem		; returns removed count in R0 (and set flags)
+	beq	20$			; R0=0? (nothing was removed)
+	add	R0, EpisodeVar0
+	inc	EpisodeVar1		; allow show message from boss 0
+	mov	#SND_REMOVEITEM, R0
+	.ppexe	#CmdSoundPlay
+	call	UpdateItems
+	cmp	EpisodeVar0, #7.	; (40.) enough boulders - end of episode?
+	blt	30$			; if no - clear C flag and return
+	mov	#TOBJ_FRIEND*256.+TSUB_BOSS, R1
+	mov	#TXTID_EP0END, R5
+	call	EventShowMessage
+	sec
+	return
+20$:	tst	EpisodeVar1		; was message shown just recently?
+	beq	30$
+	mov	#TOBJ_FRIEND*256.+TSUB_BOSS, R1
+	mov	#12., R5
+	call	EventShowMessage
+	clr	EpisodeVar1
+30$:	clc
 	return
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -2029,7 +2192,7 @@ VSyncX:	.WORD	2
 
 ; debug info
 DebugInfo:
-	tst	DebugMode
+	tstb	DebugMode
 	bne	.+4
 	return
 	bit	#^B1111, FrameCount	; once in 16 frames
@@ -2052,7 +2215,7 @@ CheckColors:
 	bne	10$
 	return
 10$:	clr	KeyK1
-	com	RgbMode	
+	comb	RgbMode	
 	bne	20$
 	mov	#^B1101110010011000, R0 ; swap R&G bits
 	mov	#^B1111111010111010, R1
@@ -2071,7 +2234,7 @@ CheckStop:
 	tst	KeyStop
 	beq	99$
 	clr	KeyStop			; release STOP
-	clr	Pause			; unpause
+	clrb	Pause			; unpause
 	clr	CurrentMode		; reset mode
 99$:	return
 
@@ -2080,8 +2243,8 @@ CheckDebug:
 	tst	KeyCombo
 	beq	99$
 	clr	KeyCombo		; release K2
-	clr	Pause			; unpause
-	com	DebugMode		; debug on|off
+	clrb	Pause			; unpause
+	comb	DebugMode		; debug on|off
 	clr	CurrentMode		; reset game
 99$:	return
 
@@ -2101,17 +2264,40 @@ VSync:	inc	VSyncCount1		; this one is used in CPU
 
 ; TODO: move vars to [0..500] unused interrupts vectors
 
-CpuWaitCount0:	.WORD	0	; to measure wait time
-CpuWaitCount:	.WORD	0	; CPU empty cycles counter
-FrameCount:	.WORD	0	; 'frame' counter
+CpuWaitCount0:	.word	0	; to measure wait time
+CpuWaitCount:	.word	0	; CPU empty cycles counter
+FrameCount:	.word	0	; 'frame' counter
 
-Pause:		.WORD	0	; <>0 - paused
+CurrentMode:	.word	0	; game mode (0-reset, 1-menu.. etc)
+Episode:	.word	0	; game episode number
+EpisodeVar0:	.word	0	; for episode 0 it's boulders count at boss 0
+EpisodeVar1:	.word	0
 
-CurrentMode:	.WORD	0	; game mode (0-reset, 1-menu.. etc)
-RgbMode:	.WORD	0	; RGB/GRB switch
-DebugMode:	.WORD	0	; debug mode switch
+; BYTE-sized variables (!) use with caution ------------------------------------
+Pause:		.byte	0	; <>0 - paused
+RgbMode:	.byte	0	; RGB/GRB switch
+DebugMode:	.byte	0	; debug mode switch
+TestSoundNum:	.byte	1	; sound test number
+EpisodeDream:	.byte	0	; game episode is in dream mode (sprite colors will be only plane 0)
 
-TestSoundNum:	.word	1	; sound test number
+; Episode init vars
+EListDream:	.byte	0,  1,  0
+EListPlayerX:	.byte	200., 128., 200.
+EListPlayerY:	.byte	 48.,  64.,  48.
+EListPlayerDir:	.byte	1,  1,  1
+EListPlayerSpr:	.byte	5., 5., 5.
+EListGlevX:	.byte	0.,  0., 0.
+EListGlevY:	.byte	0., 15., 0.
+		; need this for index = -1
+		.byte	TXTID_GAMEOVER
+EListMsg:	.byte	TXTID_EP0MSG, TXTID_EP1MSG, TXTID_EP2MSG
+
+; episode object changes - 02 episode (glx,gly,objnum, [type|subtype],arg#0,arg#1,coords)
+ChgObjE0201:	.byte	0,0, 0, TOBJ_ITEM*32+ITEM_LIGHT, 10., 0, 3*16.+8.
+ChgObjE0202:	.byte	2,0, 0, 0,0,0,0
+
+.even
+; ------------------------------------------------------------------------------
 
 glevelX:	.byte	0
 glevelY:	.byte	0
@@ -2219,8 +2405,7 @@ TilesWeight:	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 0
 		
 
 EventsTable:
-	.word	0
-	.word	EventMsg1-200000,  EventMsg2-200000
+	.word	0, EventMsg1-200000,  EventMsg2-200000, EventEpis0Chk-200000, EventMsg3-200000
 
 
 @include inc_cpu_sprites.mac
@@ -2251,9 +2436,18 @@ END:
 
 @include inc_levels.mac
 
+; 'get me ore' message
 EventMsg1:
 	.byte	EVC_CLR,   EVC_MSG,9.,TOBJ_FRIEND,0,   0
+; 'need a light' message
 EventMsg2:
 	.byte	EVC_CLR,   EVC_MSG,10.,0,0,    0
+; check for episode 0 end (remove ore)
+EventEpis0Chk:
+	.byte	EVC_EPIS0_CHK, 0
+; Yana's message 'do what you must'
+EventMsg3:
+	.byte	EVC_CLR,  EVC_MSG,TXTID_YANA01,TOBJ_FRIEND,0,	0
+
 
 ENDVram12:

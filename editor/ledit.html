@@ -57,7 +57,7 @@ textarea { width:100%; height:150px; }
     var levidx = 0;
 
     var CLV_LOCAL_DX = 15, CLV_LOCAL_DY = 13;
-    var CGL_LEV_DX = 4, CGL_LEV_DY = 20;
+    var CGL_LEV_DX = 4, CGL_LEV_DY = 16;
     var CGL_DX = CGL_LEV_DX * CLV_LOCAL_DX + 1;
     var CGL_DY = CGL_LEV_DY * CLV_LOCAL_DY + 1;
 
@@ -323,7 +323,8 @@ function CopyFromText2 (sline, arrto)
     sline = sline.substr(5).trim();
     if (sline.length == 0) return "string for GlobalObj is too short";
     let arr = sline.split(/,/);
-    for (let k=0; k<arr.length; k++) {        
+    for (let k=0; k<arr.length; k++) {
+	if (copyIdxI >= arrto.length) { console.log('CopyFromText2 will skip lines from '+copyIdxI); break; }
         arrto[copyIdxI][copyIdxJ][copyIdxK] = arr[k].trim();
 	copyIdxK++;
 	if (copyIdxK >= 4) { 

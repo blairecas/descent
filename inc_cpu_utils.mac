@@ -291,7 +291,7 @@ DrawLifeLine:
 
 
 PrintSoundNum:
-	mov	TestSoundNum, R0
+	movb	TestSoundNum, R0	; high-byte must be 0
 	mov	#27., R1
 	mov	#180., R2
 	.ppexe	#CmdPrint2Dec
@@ -315,7 +315,11 @@ ClearVBuffer:
 BufTile:
 	bic	#^B1111111100000000, R0	; clear high byte (can be trash in there)
 	.ppexe	#CmdBufTile
-	; get buffer addr
+	; test for dreaming episodes
+	tstb	EpisodeDream
+	beq	2$
+	clr	R0			; TILE IS EMPTY for dreaming!!!
+2$:	; get buffer addr
 	asl	R2
 	mov	LevYBufOfs(R2), R4
 	asl	R1			; levelX*2 (tile width is 1 word)
@@ -440,6 +444,11 @@ BufSprite:
 	; execute buf sprite in PPU with updated X,Y,DY
 	asl	R0			; offset in bytes -> words
 	.ppexe	#CmdBufSprite
+	; do we need to draw planes 1&2?
+	tstb	EpisodeDream
+	beq	.+4
+	return
+	; drawing planes 1&2
 	mov	SpritesAddr(R0), R0	; R0 = sprite address
 	; get buffer addr - (Y*32) + (X/8 even)
 	ash	#5., R2			; R2=Y*32

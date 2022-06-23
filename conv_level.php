@@ -1,8 +1,11 @@
 <?php
 	echo "Processing levels ...\n";
 	
-	$gDX = 4*15+1;
-	$gDY = 20*13+1;
+	$CGL_LEV_DX = 4;
+	$CGL_LEV_DY = 16;
+
+	$gDX = $CGL_LEV_DX*15+1;
+	$gDY = $CGL_LEV_DY*13+1;
 	$gTotal = $gDX * $gDY;
 
 	$arrReplaceFrom = Array();
