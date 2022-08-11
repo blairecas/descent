@@ -80,7 +80,7 @@ TOBJ_TRIG	= 3
 TSUB_BOSS	= 0
 TSUB_SPIDER1	= 0
 
-; (!) change table in item processing if changing here (!)
+; (!) change table in item processing if changing here (!) (and in item messages table)
 ITEM_LIGHT	= 1
 ITEM_SPADE	= 2
 ITEM_CHERRY	= 3
@@ -127,7 +127,11 @@ TXTID_EP0END	= 13.
 TXTID_EP1MSG	= 14.
 TXTID_EP2MSG	= 15.
 TXTID_YANA01	= 16.
+TXTID_CANTLIGHT = 17.
 
+TXTID_DESC_LIGHT = 20.
+TXTID_DESC_SPADE = 21.
+TXTID_DESC_CHERRY = 22.
 
 ; //////////////////////////////////////////////////////////////////////////////	
 ; // CPU<->PPU exchange variables

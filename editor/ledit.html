@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -9,7 +10,7 @@
 .panel > div { margin-bottom:4px; }
 .vseparator { border-left:#aaa 2px dotted; }
 .hseparator { border-bottom:#aaa 2px dotted; }
-textarea { width:100%; height:150px; }
+textarea { width:98%; height:150px; }
 #aid_tex_obj { height: 100px; }
 #aid_img_tiles { width: 340px; }
 #aid_img_sprites { width: 340px; }
@@ -44,6 +45,7 @@ textarea { width:100%; height:150px; }
     var GlobalLevel  = [];
     var GlobalObjLen = [];
     var GlobalObj    = [];
+    var GlobalDarken = [];
 
     var levelTable = null;
     var imgTiles = null;
@@ -143,8 +145,11 @@ function UpdateLevelPoint (nx, ny)
     levX = nx; levY = ny;
     levelTable.rows[levY].cells[levX].firstChild.classList.add("active");
     levidx = _gidx(levX, levY);
+    let gX = gLevelX*CLV_LOCAL_DX+levX;
+    let gY = gLevelY*CLV_LOCAL_DY+levY;
+    let gC = gY * CGL_DX + gX;
     $('#aid_div_ltile').find('span').html('<b>'+GlobalLevel[levidx]+'</b>');
-    $('#aid_div_gcoord').find('span').text('('+gLevelX+','+gLevelY+')');
+    $('#aid_div_gcoord').find('span').text('('+gLevelX+','+gLevelY+') gCoord: ('+gX+','+gY+') '+gC);
     $('#aid_div_lcoord').find('span').html('(x,y):('+levX+','+levY+') ['+(levY*(CLV_LOCAL_DX+1)+levX)+'] <b>'+levY+'*'+(CLV_LOCAL_DX+1)+'+'+levX+'</b>');
 }
 
@@ -238,6 +243,10 @@ function CopyToText ()
     for (let i=0; i<CGL_LEV_DY*CGL_LEV_DX; i++) arr.push(GlobalObjLen[i]);
     st = st + "GlobalObjLen:\n\t.byte\t" + arr.join(',') + "\n";
     st = st + "\t.even\n";
+    // darkened squares
+    st = st + "\nGlobalDarken:\n";
+    for (let i=0; i<GlobalDarken.length; i+=2) st = st + "\t.word\t" + GlobalDarken[i] + ", " + GlobalDarken[i+1] + "\n";
+    st = st + "\t.word\t0\n";
     // global level
     arr = [];
     st = st + "\nGlobalLevel:\n";
@@ -295,24 +304,31 @@ function CopyFromText ()
 	if (sline.toLowerCase() == 'globallevel:')  { usewith=1; copyIdx=0; continue; }
 	if (sline.toLowerCase() == 'globalobjlen:') { usewith=2; copyIdx=0; continue; }
 	if (sline.toLowerCase() == 'globalobj:')    { usewith=3; copyIdxI=copyIdxJ=copyIdxK=0; InitObjArray(); continue; }
+	if (sline.toLowerCase() == 'globaldarken:') { usewith=4; copyIdx=0; continue; }
 	switch (usewith)
 	{
-	    case 1: error = CopyFromText1(sline, GlobalLevel); break;
-	    case 2: error = CopyFromText1(sline, GlobalObjLen); break;
+	    case 1: error = CopyFromText1(sline, GlobalLevel, 0xFF); break;
+	    case 2: error = CopyFromText1(sline, GlobalObjLen, 0xFF); break;
 	    case 3: error = CopyFromText2(sline, GlobalObj); break;
+	    case 4: error = CopyFromText3(sline, GlobalDarken); break;
 	    default: error = "Text data without label!";
 	}
     }
     if (error.length == 0 && copyIdxI != CGL_LEV_DX*CGL_LEV_DY) error = "Wrong number of bytes in OBJ labels";
     if (error.length > 0) alert(error);
     UpdateLevelTable();
+    // darkened to text area
+    let s = "";
+    for (let i=0; i<GlobalDarken.length-1; i+=2)
+	s = s + GlobalDarken[i] + ", " + GlobalDarken[i+1] + "\n";
+    $('#aid_tex_darken').text(s);
 }
 
 
-function CopyFromText1 (sline, arrto)
+function CopyFromText1 (sline, arrto, mask)
 {
     let arr = sline.split(/[^\d]+/).filter((a) => a);
-    for (let k=0; k<arr.length; k++, copyIdx++) arrto[copyIdx] = parseInt(arr[k]) & 0xFF;
+    for (let k=0; k<arr.length; k++, copyIdx++) arrto[copyIdx] = parseInt(arr[k]) & mask;
     return '';
 }
 
@@ -335,6 +351,21 @@ function CopyFromText2 (sline, arrto)
 		copyIdxI++;
 	    }
 	}
+    }
+    return '';
+}
+
+
+function CopyFromText3 (sline, arrto)
+{
+    let arr = sline.split(/,/);
+    for (let k=0; k<arr.length; k++, copyIdx++) {
+	let s = arr[k];
+	let idx = s.search(/[0-9]/);
+	if (idx < 0) return 'CopyFromText3: entries must contain digits';
+	s = s.substring(idx).trim();
+	if (s == '0') continue; // skil zeroes
+	arrto[copyIdx] = s;
     }
     return '';
 }
@@ -399,13 +430,17 @@ function InitArrays ()
 <body>
 
 <div class="panel">
+
     <div class="center">Level (wasd)</div>
     <div><table id="aid_level_table"><tbody></tbody></table></div>
-    <div id="aid_div_gcoord">gLevel <span></span></div>
+
+    <div id="aid_div_gcoord">gLevel: <span></span></div>
     <div id="aid_div_lcoord">Coord <span></span></div>
     <div id="aid_div_ltile">Tile: <span></span></div>
+
     <div class="hseparator"></div>
-    <div><textarea id="aid_tex_obj"></textarea></div>
+    <div><textarea id="aid_tex_obj" style="height:80px;"></textarea></div>
+
     <div><span>Objects: </span><span id="aid_span_obj"></span><input type="button" value="Set" onclick="javascript:SetGlevObj();" /></div>
     <div class="hseparator"></div>
     <div style="background-color:lightgrey;">Current Level</div>
@@ -423,7 +458,17 @@ function InitArrays ()
     <div><input type="button" value="Clear" onclick="javascript:ClearTextField();" /></div>
     <div></div>
 </div>
+
 <div class="panel vseparator" style="height:100%;"></div>
+
+<div class="panel">
+	<div class="center">Darkened</div>
+	<div><textarea id="aid_tex_darken" style="width:150px; height:600px;"></textarea></div>
+	<div><input type="button" value="Set" onclick="javascript:SetDarkenArray();" /></div>
+</div>
+
+<div class="panel vseparator" style="height:100%;"></div>
+
 <div class="panel">
     <div class="center">Tiles (click)</div>
     <img id="aid_img_tiles" src="../graphics/TTiles.png" />
@@ -431,6 +476,7 @@ function InitArrays ()
     <div class="center">Sprites (just for info)</div>
     <img id="aid_img_sprites" src="../graphics/SSprites.png" />
 </div>
+
 <div style="clear:both;"></div>
 
 <script type="text/javascript">

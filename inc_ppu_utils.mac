@@ -255,7 +255,7 @@ PrintMsg:
 	call	PrintPrepare
 	mov	(SP)+, R1
 	mov	(SP)+, R2
-	; adjust coords
+	; adjust X coord
 	cmp	R1, #FieldX		; test for X < left border
 	bgt	1$
 	mov	#FieldX+1, R1
@@ -271,7 +271,11 @@ PrintMsg:
 	blt	2$
 	sub	R5, R4
 	sub	R4, R1
-2$:	; save coords again
+2$:	; adjust Y coord (only need to check against top)
+	cmp	R2, #FieldY+2
+	bge	3$
+	mov	#FieldY+2, R2
+3$:	; save coords again
 	mov	R2, -(SP)
 	mov	R1, -(SP)
 	; set vaddr
@@ -447,7 +451,7 @@ DrawLifeBgr:
 	sob	R3, 40$
 	return
 
-; R0 = playerLifeCur
+; R0 = playerLifeCur, R1 = playerLifeMax
 ; draws current life line tip
 DrawLifeCur:
 	mov	R1, -(SP)		; save playerLifeMax
@@ -471,13 +475,15 @@ DrawLifeCur:
 	asr	R2
 	asr	R2
 	asr	R2
-	cmp	R0, R2			; compare to playerLifeCur
+35$:	cmp	R0, R2			; compare to playerLifeCur
 	bhis	99$			; nothing to add to the end?
 	sub	#SCRWID*5-1, (R4)	; add empty 'square' to end
 	mov	#5, R3
 40$:	clr	(R5)
 	add	R1, (R4)
 	sob	R3, 40$
+	inc	R0
+	br	35$
 99$:	return
 100$:	.word	^B0000000000000000, ^B0000000100000001, ^B0000001100000011, ^B0000011100000111
 	.word	^B0000111100001111, ^B0001111100011111, ^B0011111100111111, ^B0111111101111111

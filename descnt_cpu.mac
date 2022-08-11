@@ -218,6 +218,12 @@ MainClearPrepare:
 	sob	R3, .-2
 	mov	#63., playerLifeMax	; set player life max for drawing box
 	clr	playerLifeCur		; current life meter (not actual life)
+	; reset already taken items list
+	mov	#TakenItems-200000, PutA12
+	mov	#TakenItemsEnd-TakenItems, R3
+	clr	R1
+	call	PutB12			; R1 to vaddr (0) (don't forget that procedure invalidates R2)
+	sob	R3, .-4
 	; TODO: some lenghty operations can be done here
 	; wait for unpacking to finish 
 	call	PpuWait
@@ -245,6 +251,8 @@ MainEpisodePrepare:
 	call	ChangeGlobalObject
 	mov	#ChgObjE0202, R5	; remove light message
 	call	ChangeGlobalObject
+	mov	#ChgTileE0201, R5	; open door
+	call	ChangeGlobalTile
 20$:	; episode variables
 	mov	Episode, R0
 	movb	EListDream(R0), EpisodeDream	; dreaming episodes?
@@ -775,25 +783,38 @@ InitTilesWeight:
 	bisb	TilesWeight(R0), R1
 	swab	R1
 	bis	R1, R0
-	bis	#^B0010000000000000, R0	; all tiles will be darkened by default
+	; bis	#^B0010000000000000, R0	; all tiles will be darkened by default
 	mov	R0, (R5)
 	inc	(R4)
 	sob	R3, 10$
-	; undarken upper 5 lines
-	mov	(SP), (R4)
-	mov	#5*CGL_DX, R3
-20$:	bic	#^B0010000000000000, (R5)
+	; set dark tiles from darken squares table
+	mov	#GlobalDarken-200000, R0
+	sec
+	ror	R0			; R0 <- darken table addr
+30$:	; start darken square
+	mov	R0, (R4)
+	add	#2, R0
+	mov	(R5), R1		; R1 <- offset in global field
+	beq	60$			; zero? exit
+	inc	(R4)			; advance to next word
+	mov	(R5), R2		; R2 <- [height][width]
+	mov	R2, R3
+	clrb	R3
+	swab	R3			; R3 <- height
+	bic	#^B1111111100000000, R2	; R2 <- width
+	mov	(SP), (R4)		; set vaddr to global level start
+	add	R1, (R4)		; add offset (square upper left corner)
+	mov	R2, R1			; save width
+	; square darken cycle
+40$:	mov	R1, R2
+50$:	bis	#^B0010000000000000, (R5)	; darken bit
 	inc	(R4)
-	sob	R3, 20$
-	; undarken first 2 screens
-	mov	(SP)+, (R4)		; (!) restore stack
-	mov	#FieldDY, R3
-30$:	mov	#CLV_LOCAL_DX*2+1, R2
-40$:	bic	#^B0010000000000000, (R5)
-	inc	(R4)
-	sob	R2, 40$
-	add	#CGL_DX-<CLV_LOCAL_DX*2>-1, (R4)
-	sob	R3, 30$
+	sob	R2, 50$
+	sub	R1, (R4)		; revind vaddr
+	add	#CGL_DX, (R4)		; advance to next line
+	sob	R3, 40$
+	br	30$
+60$:	tst	(SP)+			; (!) restore SP
 	return
 
 
@@ -827,6 +848,26 @@ ChangeGlobalObject:
 	call	PutB12
 	movb	(R5)+, R1		; coords
 	call	PutB12
+	return
+
+
+; make change in global tile field
+; R5 - change tile sequence (global offset, new tile #)
+ChangeGlobalTile:
+	mov	(R5)+, R0		; R0 = global offset
+	mov	(R5)+, R1		; R1 = new tile #
+	call	SetVreg			; 
+	mov	#GlobalLevel-200000, R2	; get global level addr
+	sec				;
+	ror	R2			; R2 - vaddr
+	add	R0, R2			; add offset
+	mov	R2, (R4)		; set vaddr
+	; need to get new tile weight
+	movb	TilesWeight(R1), R0	; we don't need clear upper byte, weights are 5-bits
+	swab	R0			; weights are in upper byte
+	bis	R0, R1			; R1 = new tile # with weight
+	bic	#^B0001111111111111, (R5)	; keep darken and current draw states
+	bis	R1, (R5)
 	return
 
 
@@ -1304,7 +1345,7 @@ PLightLevel:
 PStateTable:
 	.word	PlayerWalking, PlayerFalling, PlayerJumping, PlayerClimbing, PlayerDying
 PLightTable:
-	.word	PLightSquare, RetFunc
+	.word	RetFunc, PLightSquare
 
 ; main process player function
 ProcessPlayer:
@@ -1390,19 +1431,40 @@ Acting:
 	call	@ActingTable(R0)
 99$:	return
 
+
 ActingStartTable:
 	.word	AcStartNone, AcStartLight, AcStartSpade, AcStartHealth, AcStartNone
 ActingTable:
 	.word	RetFunc, RetFunc, ActingSpade, RetFunc, RetFunc
+
 
 ; nothing to do - clear plActing variable
 AcStartNone:
 	clr	plActing
 	return
 
+
 AcStartLight:
 	clr	plActing
+	; check if we can light anything
+	mov	#Level, R5
+10$:	bit	#^B0010000000000000, (R5)+	; check 'darkened' bit
+	bne	20$				; have something can light up
+	cmp	R5, #LevelEnd
+	blo	10$
+	; nothing to light - show message
+	clr	R1				; will coords of message to player (i think)
+	mov	#TXTID_CANTLIGHT, R5
+	call	EventShowMessage
 	return
+20$:	mov	#Level, R5
+30$:	bic	#^B0010000000000000, (R5)+	; clear 'darkened' bit
+	cmp	R5, #LevelEnd
+	blo	30$
+	call	ConsumeItem			; remove one flashlight
+	call	RedrawFull
+	return
+
 
 AcStartSpade:
 	; ask to set hit point (hitpointX must be 0 at this point?)
@@ -1666,8 +1728,24 @@ RemoveItem:
 	return
 
 
+; clears items presence vars
+ClearItemPresence:
+	clr	plLightType		; no flashlight by default
+	return
+
+
+; sets item presence for some items (e.g. flashlight, keys etc)
+; R5 - item #
+SetItemPresence:
+	cmp	R5, #ITEM_LIGHT
+	bne	90$
+	mov	#1, plLightType		; flashlight is present
+90$:	return
+
+
 ; update player items on screen
 UpdateItems:
+	call	ClearItemPresence	; clears item presence vars
 	mov	#Items, varAddr		; item 
 	mov	ItemBoxVAddr, varAddr3	; vaddr of item box
 10$:	; I haven't 'draw' sprite on arbitrary vaddr proc
@@ -1680,6 +1758,7 @@ UpdateItems:
 	clr	R5
 	bisb	@varAddr, R5
 	beq	20$			; no item
+	call	SetItemPresence		; set item presence for some (e.g. flashlight is present and so on)
 	clr	R0
 	bisb	ItemBaseSpr(R5), R0	; item sprite #
 	clr	R1
@@ -1838,13 +1917,34 @@ ProcObjItem:
 	mov	playerY, R5
 	call	100$
 	bcc	99$
-	; collided - try add item to inventory
+	; === collided - try add item to inventory ===
 	clr	(R0)
+	mov	R2, -(SP)	; save item ID
 	mov	R2, R1
 	call	AddItem
 	call	UpdateItems
 	mov	#SND_ADDITEM, R0
 	.ppexe	#CmdSoundPlay
+	; if added for the first time - show description
+	mov	(SP)+, R5		; restore item ID
+	; check if it was a first time
+	mov	#TakenItems-200000, GetA12
+	add	R5, GetA12
+	call	GetB12			; R0 = item was taken or not
+	bne	99$			; was taken already
+	; set it as 'was taken already'
+	mov	#TakenItems-200000, PutA12
+	add	R5, PutA12
+	mov	#1, R1
+	call	PutB12
+	; show message
+	mov	#ItemMessage-200000, GetA12
+	add	R5, GetA12
+	call	GetB12			; R0 = message ID
+	mov	R0, R5			; put it to R5 for procedure parameter
+	clr	R1			; assume coords as player
+	call	EventShowMessage
+	; ===
 99$:	return
 ; compare coordinates to be inside
 100$:
@@ -2298,6 +2398,9 @@ ChgObjE0202:	.byte	2,0, 0, 0,0,0,0
 
 .even
 ; ------------------------------------------------------------------------------
+; tile changing (global offset, new tile #)
+ChgTileE0201:	.word	580., 61.
+
 
 glevelX:	.byte	0
 glevelY:	.byte	0
@@ -2395,7 +2498,7 @@ TilesWeight:	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 0
 		.byte	0, 0, 0, 0, 0, 0, 2, 0, 1, 1	; 30
 		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 40
 		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 50
-		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 60
+		.byte	3, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 60
 		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 70
 		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 80
 		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 90
@@ -2435,6 +2538,18 @@ END:
 .=VDATA*2
 
 @include inc_levels.mac
+
+; Items take first time message IDs
+ItemMessage:
+	.byte	0, TXTID_DESC_LIGHT, TXTID_DESC_SPADE, TXTID_DESC_CHERRY, 
+	.byte	0 ; no description for ore
+	.byte	0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+	.byte	0, 0, 0, 0, 0, 0, 0, 0
+; Taken items list (!=0 - was taken once)
+TakenItems:	.blkb	32.
+TakenItemsEnd:
 
 ; 'get me ore' message
 EventMsg1:

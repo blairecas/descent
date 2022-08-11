@@ -273,18 +273,20 @@ DrawLifeLine:
 30$:	mov	R2, (R5)
 	add	R1, (R4)
 	sob	R3, 30$
-	; draw end with empty
+	; draw to the end with empty
 	mov	playerLifeMax, R2
 	asr	R2
 	asr	R2
 	asr	R2
-	cmp	R0, R2
-	bhis	99$
+35$:	cmp	R0, R2			; already at the end?
+	bhis	99$			; if yes then exit
 	sub	#SCRWID*5-1, (R4)
 	mov	#5, R3
 40$:	clr	(R5)
 	add	R1, (R4)
 	sob	R3, 40$
+	inc	R0
+	br	35$
 99$:	return
 100$:	.word	^B0000000000000000, ^B0000000100000001, ^B0000001100000011, ^B0000011100000111
 	.word	^B0000111100001111, ^B0001111100011111, ^B0011111100111111, ^B0111111101111111
