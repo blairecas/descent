@@ -2069,7 +2069,7 @@ ProcSpider1:
 	bit	#^B1000000000000000, 2(R5)	; check moving direction
 	bne	50$
 	; move right
-	cmp	R1, #FieldDX*16.-18.		; right screen boundary -2px
+	cmp	R1, #FieldDX-2*16.+4		; right screen boundary -12px (to not bite player at the edge)
 	bge	18$
 	inc	R1
 	inc	R1	
@@ -2080,7 +2080,7 @@ ProcSpider1:
 20$:	add	#2, 4(R5)
 	return
 50$:	; move left
-	cmp	R1, #10.			; left screen boundary +10px (spider can't stay on leftmost tile)
+	cmp	R1, #12.			; left screen boundary +12px (spider can't stay on leftmost tile)
 	ble	58$
 	dec	R1
 	dec	R1
