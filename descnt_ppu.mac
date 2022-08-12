@@ -102,27 +102,29 @@ CommandsTable:
 	.word	SNDSTA			; 05. start sound
 	.word	MUSSTA			; 06. start music
 	.word	PrintStr		; 07. print single-height string
-	.word	PrintMsg		; 08. print message in box
-	.word	ClearVBuffer		; 09. clear buffer
-	.word	DrawTile		; 10. draw 16x16 tile to x,y
-	.word	DrawTileVaddr		; 11. draw 16x16 tile to vaddr
-	.word	DrawTile8Vaddr		; 12. draw 8x8 tile to vaddr
-	.word	BufTile			; 13. tile 16x16 to buffer
-	.word	BufSprite		; 14. 16x16 sprite with mask to buffer
-	.word	Buf2Scr16		; 15. buffer tile 16x16 to screen
-	.word	Clr2Scr16		; 16. clear tile 16x16 on screen
-	.word	FillScreen		; 17. fill screen plane 0 with R0
-	.word	LinesFromR0		; 18. set lines vaddrs starting from R0
-	.word	HideScreen		; 19. hides screen (8 lines of bottom is on center)
-	.word	DebugString		; 20. show info on bottom of screen
-	.word	FadeInScreen		; 21. screen fade in, R0=1..144.
-	.word	FadeOutScreen		; 22. screen fade out, R0=1..144.
-	.word	UpdItem			; 23. update item box with sprite
-	.word	UnpackLevels		; 24. unpack levels data PPU vram -> CPU vram
-	.word	DrawLifeBgr		; 25. draw player life bar background
-	.word	DrawLifeCur		; 26. draw player life line
-	.word	ClrScrBottom		; 27. clear last 12 lines of screen vmem
-	.word	Print2Dec		; 28. prints 2-digits decimal
+	.word	CenteredStr		; 08. print centered string
+	.word	PrintMsg		; 09. print message in box
+	.word	ClearVBuffer		; 10. clear buffer
+	.word	DrawTile		; 11. draw 16x16 tile to x,y
+	.word	DrawTileVaddr		; 12. draw 16x16 tile to vaddr
+	.word	DrawTile8Vaddr		; 13. draw 8x8 tile to vaddr
+	.word	BufTile			; 14. tile 16x16 to buffer
+	.word	BufSprite		; 15. 16x16 sprite with mask to buffer
+	.word	Buf2Scr16		; 16. buffer tile 16x16 to screen
+	.word	Clr2Scr16		; 17. clear tile 16x16 on screen
+	.word	FillScreen		; 18. fill screen plane 0 with R0
+	.word	LinesFromR0		; 19. set lines vaddrs starting from R0
+	.word	HideScreen		; 20. hides screen (8 lines of bottom is on center)
+	.word	DebugString		; 21. show info on bottom of screen
+	.word	FadeInScreen		; 22. screen fade in, R0=1..144.
+	.word	FadeOutScreen		; 23. screen fade out, R0=1..144.
+	.word	UpdItem			; 24. update item box with sprite
+	.word	ClrItem			; 25. clears item box
+	.word	UnpackLevels		; 26. unpack levels data PPU vram -> CPU vram
+	.word	DrawLifeBgr		; 27. draw player life bar background
+	.word	DrawLifeCur		; 28. draw player life line
+	.word	ClrScrBottom		; 29. clear last 12 lines of screen vmem
+	.word	Print2Dec		; 30. prints 2-digits decimal
 
 	
 ; //////////////////////////////////////////////////////////////////////////////

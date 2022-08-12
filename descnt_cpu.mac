@@ -73,11 +73,11 @@ MainCycleTable:
 	.WORD	MainReset, MainMenu, MainClearPrepare, MainEpisodePrepare, MainScreenUp, MainEpisodeBeforePlay, MainGame, MainFadeOut, MainOverPrepare, MainOver, MainNextEpisode
 
 
-; Menu Tiles - X, Y, Id1, Id2, Id3 ... 255. then again till Id=0
+; Menu Tiles - Id1, Id2, Id3 ... 
 MenuTbl00:	.byte	00., 04., 30., 04., 31., 04., 00.
 		.byte	121., 122., 123., 124., 125., 126., 127.
 		.byte	00., 44., 43., 44., 43., 44., 00.
-; Menu Texts - X, Y, Id, 1|2x ...
+; Menu Texts - X, Y, Id ...
 MenuTbl10:	.byte	013., 110., 00.,	013., 120., 01.,	013., 130., 02.
 		.byte	013., 145., 03.,	013., 155., 04.,	013., 165., 05.
 		.byte	013., 180., 06., 	014., 200., 07.,	0
@@ -200,10 +200,9 @@ MainClearPrepare:
 	.ppexe	#CmdClrScrBottom
 	.ppexe	#CmdHideScreen		; hide anything going on screen
 	; episode 0 text output
-	mov	#8., R0
-	mov	#14., R1
+	mov	#TXTID_EP0MSG, R0
 	mov	#288., R2
-	.ppexe	#CmdPrintStr
+	.ppexe	#CmdCenteredStr
 	; unpack level & objects data from PPU vram
 	mov	#GlobalLevel-200000, R0
 	mov	#GlobalObj-200000, R1
@@ -268,8 +267,7 @@ MainEpisodePrepare:
 	clr	playerItemNew
 	mov	playerLifeMax, playerLife
 	; init level field (global->local)
-	clr	glevelX				; glevelX = 377 - not initialized
-	dec	glevelX				; glevelY = 377
+	movb	#-1, glevelX			; -1 = not initialized
 	movb	EListGlevX(R0), glevelNewX	; new global level coords
 	movb	EListGlevY(R0), glevelNewY	;
 	; vars init complete
@@ -312,6 +310,7 @@ MainEpisodeBeforePlay:
 	
 ; 6 - game processing
 MainGame:
+	call	ProcessDelayedMsg
 	call	DrawPlayerLife
 	call	BufAllSprites
 	call	DrawChanged
@@ -352,9 +351,8 @@ MainOverPrepare:
 	mov	Episode, R1
 	clr	R0
 	bisb	EListMsg(R1), R0
-	mov	#13., R1
 	mov	#288., R2
-	.ppexe	#CmdPrintStr
+	.ppexe	#CmdCenteredStr
 	; game over or not?
 	tst	Episode
 	bmi	85$
@@ -424,9 +422,8 @@ BufAllSprites:
 
 ; buffer currently using item
 BufActTable:
-	.WORD	BufActNone, BufActNone, BufActSpade
-BufActNone:
-	return
+	.WORD	RetFunc, RetFunc, BufActSpade
+
 BufActSpade:
 	mov	plActingArg1, R0	; direction (0->,1,2,3 clockwise)
 	clr	drawSpr
@@ -456,7 +453,7 @@ BufActSpade:
 	cmp	R3, #1
 	bne	20$
 	tst	hitpointX		; do not set if not asked to
-	bpl	20$
+	bge	20$
 	mov	plActingArg1, R0
 	movb	spadeHitDX(R0), R3
 	movb	spadeHitDY(R0), R4
@@ -606,6 +603,7 @@ RedrawFull:
 	call	BufAllTiles
 	call	BufAllSprites
 	call	DrawLevelDark
+	clr	DelayedMessage		; clears delayed message in case of screen transitions etc
 	return
 
 
@@ -820,7 +818,7 @@ InitTilesWeight:
 
 ; create level field
 InitLevelField:
-	tst	glevelX			; was previous level?
+	tstb	glevelX			; was previous level?
 	bmi	10$			; wasn't - skip saving
 	call	CopyLocalGlobal		; or else save it in vram
 10$:	movb	glevelNewX, glevelX
@@ -1344,17 +1342,15 @@ PLightLevel:
 	
 PStateTable:
 	.word	PlayerWalking, PlayerFalling, PlayerJumping, PlayerClimbing, PlayerDying
-PLightTable:
-	.word	RetFunc, PLightSquare
 
 ; main process player function
 ProcessPlayer:
 	; process player light
 	bit	#1, FrameCount			; every 2nd frame is enough
 	bne	10$
-	mov	plLightType, R0
-	asl	R0
-	call	@PLightTable(R0)
+	tstb	LightType
+	beq	10$
+	call	PLightSquare
 10$:	; process player states
 	mov	playerState, R0
 	asl	R0
@@ -1424,7 +1420,7 @@ Acting:
 	call	@ActingStartTable(R0)
 	return
 10$:	; process action
-	bit	#1, frameCount
+	bit	#1, frameCount			; to slow action animation
 	bne	99$
 	mov	plActing, R0
 	asl	R0
@@ -1445,7 +1441,7 @@ AcStartNone:
 
 
 AcStartLight:
-	clr	plActing
+	clr	plActing			; its immediate
 	; check if we can light anything
 	mov	#Level, R5
 10$:	bit	#^B0010000000000000, (R5)+	; check 'darkened' bit
@@ -1453,15 +1449,15 @@ AcStartLight:
 	cmp	R5, #LevelEnd
 	blo	10$
 	; nothing to light - show message
-	clr	R1				; will coords of message to player (i think)
-	mov	#TXTID_CANTLIGHT, R5
-	call	EventShowMessage
+	mov	#TXTID_CANTLIGHT, DelayedMessage
 	return
 20$:	mov	#Level, R5
 30$:	bic	#^B0010000000000000, (R5)+	; clear 'darkened' bit
 	cmp	R5, #LevelEnd
 	blo	30$
 	call	ConsumeItem			; remove one flashlight
+	mov	#SND_EAT, R0			; 'eat' sound
+	.ppexe	#CmdSoundPlay	
 	call	RedrawFull
 	return
 
@@ -1474,10 +1470,10 @@ AcStartSpade:
 	bne	10$
 	clr	plActing
 	return
-10$:	clr	plActingArg2	
+10$:	clr	plActingArg2			; spade acting timer	
 	tst	KeyUp				; digging up?
 	beq	20$
-	mov	#3, plActingArg1
+	mov	#3, plActingArg1		; put direction to 'up'
 	return
 20$:	tst	KeyDown				; digging down?
 	beq	30$
@@ -1490,18 +1486,20 @@ AcStartSpade:
 40$:	mov	#2, plActingArg1
 	return
 
+
 ; standard health increase item
 AcStartHealth:
+ 	clr	plActing			; clear acting state, it's immediate
 	add	#16., playerLife		; add life
 	cmp	playerLife, playerLifeMax	; check for overflow
 	ble	90$
 	mov	playerLifeMax, playerLife
 90$:	; consume item
 	call	ConsumeItem			; consume health item
- 	clr	plActing			; clear acting state as it already happened
 	mov	#SND_EAT, R0			; 'eat' sound
 	.ppexe	#CmdSoundPlay
 	return
+
 
 ; decrease item count and clear if zero
 ConsumeItem:
@@ -1516,6 +1514,7 @@ ConsumeItem:
 	mov	R0, Items(R1)
 	call	UpdateItems
 	return
+
 
 ; spade acting
 spadeHitsTableX:	.byte	15.+5, 8., -5, 8.
@@ -1630,7 +1629,7 @@ DirtifyTile:
 	mov	#^B1111111111111100, R2		; bit mask for tile 'weight'
 	mov	R5, R4
 	sub	#Level, R4
-	asr	R4				; R0 = offset in level units
+	asr	R4				; R4 = offset in level units
 	; check left side
 	bic	#^B1111111111110000, R4		; zero nibble means we are at leftmost side, level DX is always 16
 	beq	10$				; skip leftmost check
@@ -1642,13 +1641,14 @@ DirtifyTile:
 	bis	#^B100, R0			; left is solid
 10$:	; check right side
 	inc	R4				; for check rightmost side
+	bic	#^B1111111111110000, R4		; (15 + 1) & 15 = 0 -> rightmost side
 	beq	20$				; skip rightmost check
-	mov	2(R5), R1			; it's safe for (15,13) also, there is an extra word for this
+	mov	2(R5), R1			; it's safe for (15,13) also, there is an extra word for this added after LevelEnd
 	swab	R1
 	inc	R1
 	bic	R2, R1
 	bne	20$
-	bis	#^B001, R0
+	bis	#^B001, R0			; right is solid
 20$:	; check bottom 
 	cmp	R5, #LevelEnd-32.		; bottom line of level?
 	bhis	30$				; don't check it
@@ -1730,7 +1730,7 @@ RemoveItem:
 
 ; clears items presence vars
 ClearItemPresence:
-	clr	plLightType		; no flashlight by default
+	clrb	LightType		; no flashlight by default
 	return
 
 
@@ -1739,7 +1739,7 @@ ClearItemPresence:
 SetItemPresence:
 	cmp	R5, #ITEM_LIGHT
 	bne	90$
-	mov	#1, plLightType		; flashlight is present
+	incb	LightType		; flashlight is present, incb is safe here
 90$:	return
 
 
@@ -1750,14 +1750,31 @@ UpdateItems:
 	mov	ItemBoxVAddr, varAddr3	; vaddr of item box
 10$:	; I haven't 'draw' sprite on arbitrary vaddr proc
 	; so - use vbuffers and then copy square
+	tstb	@varAddr		; check for 'empty' item
+	bne	20$			; to speed up process (just clear)
+	;
+	; clear item box
+	mov	varAddr3, R1		; clear item plane-0 in PPU
+	.ppexe	#CmdClrItem
+	call	SetVreg			; now clear planes-1,2 in CPU
+	mov	R1, (R4)
+	mov	#16., R3
+	mov	#SCRWID-1, R1
+12$:	clr	(R5)
+	inc	(R4)
+	clr	(R5)
+	add	R1, (R4)
+	sob	R3, 12$
+	br	60$
+	;
+20$:	; clear vbuffer tile #0
 	clr	R0
 	clr	R1
 	clr	R2
 	call	BufTile
-	; put item in buffer at (0,0)
+	; draw item sprite in buffer at (0,0)
 	clr	R5
 	bisb	@varAddr, R5
-	beq	20$			; no item
 	call	SetItemPresence		; set item presence for some (e.g. flashlight is present and so on)
 	clr	R0
 	bisb	ItemBaseSpr(R5), R0	; item sprite #
@@ -1765,16 +1782,16 @@ UpdateItems:
 	clr	R2
 	call	BufSprite
 	; draw number of items
-	mov	varAddr, R5			; addr of [count | item #]
-	inc	R5				; R5 = count byte addr
+	mov	varAddr, R5		; addr of [count | item #]
+	inc	R5			; R5 = count byte addr
 	clr	R0
-	bisb	(R5), R0			; R0 = number of items
-	cmp	R0, #1				; do not draw 1
-	ble	20$
-	cmp	R0, #9.				; max number is 9
-	ble	12$
+	bisb	(R5), R0		; R0 = number of items
+	cmp	R0, #1			; do not draw 1
+	ble	40$
+	cmp	R0, #9.			; max number is 9 to draw (items can be more than 9)
+	ble	30$
 	mov	#9., R0
-12$:	asl	R0
+30$:	asl	R0
 	asl	R0
 	asl	R0
 	add	#SprNumbers45+80., R0
@@ -1791,14 +1808,14 @@ UpdateItems:
 	add	R2, R5
 	bisb	(R0)+, (R5)
 	; now copy square from vbuffers to screen
-20$:	mov	varAddr3, R1
+40$:	mov	varAddr3, R1
 	.ppexe	#CmdUpdItem
 	call	SetVreg
 	mov	R1, (R4)
 	mov	#VBuffer1, R1
 	mov	#VBuffer2, R2
 	mov	#16., R3
-30$:	clr	R0
+50$:	clr	R0
 	bisb	(R2)+, R0
 	swab	R0
 	bisb	(R1)+, R0
@@ -1812,18 +1829,18 @@ UpdateItems:
 	add	#BUFWID-2, R1
 	add	#BUFWID-2, R2
 	add	#SCRWID-1, (R4)
-	sob	R3, 30$
-	; restore vbuffers
+	sob	R3, 50$
+60$:	; advance to next item
+	add	#SCRWID*21., varAddr3
+	add	#2, varAddr
+	cmp	varAddr, #Items+16.
+	blo	10$
+	; restore vbuffers tile #0 (not always needed but ok)
 	clr	R0
 	bisb	@#Level, R0
 	clr	R1
 	clr	R2
 	call	BufTile
-	;
-	add	#SCRWID*21., varAddr3
-	add	#2, varAddr
-	cmp	varAddr, #Items+16.
-	blo	10$
 	return
 
 
@@ -1922,9 +1939,9 @@ ProcObjItem:
 	mov	R2, -(SP)	; save item ID
 	mov	R2, R1
 	call	AddItem
-	call	UpdateItems
 	mov	#SND_ADDITEM, R0
 	.ppexe	#CmdSoundPlay
+	call	UpdateItems
 	; if added for the first time - show description
 	mov	(SP)+, R5		; restore item ID
 	; check if it was a first time
@@ -1941,9 +1958,7 @@ ProcObjItem:
 	mov	#ItemMessage-200000, GetA12
 	add	R5, GetA12
 	call	GetB12			; R0 = message ID
-	mov	R0, R5			; put it to R5 for procedure parameter
-	clr	R1			; assume coords as player
-	call	EventShowMessage
+	mov	R0, DelayedMessage	; will show description with delay a bit
 	; ===
 99$:	return
 ; compare coordinates to be inside
@@ -2191,6 +2206,7 @@ RunEvent:
 99$:	tst	(SP)+
 	return
 
+
 ; show message for events (or just show it)
 ; R1=[obj type][obj subtype], R5=msg #
 EventShowMessage:
@@ -2208,6 +2224,25 @@ EventShowMessage:
 	beq	.-4
 	call	RedrawFull
 	return
+
+
+; delayed message processing, set or decrease timer and show messahe
+ProcessDelayedMsg:
+	tst	DelayedMessage		; any message to show?
+	bne	10$
+	return
+10$:	tstb	DelayedMessage+1	; timer was set?
+	bne	20$
+	movb	#2., DelayedMessage+1	; set default timer to 2 if not
+	return
+20$:	decb	DelayedMessage+1	; if timer was set - decrease
+	beq	30$
+	return
+30$:	mov	DelayedMessage, R5	; timer went to 0, can use MOV
+	clr	R1			; assume coords as player
+	call	EventShowMessage	; (!) it will clear DelayedMessage var after RedrawFull
+	return
+
 
 ; decrease boulder count and check for episode 0 end
 ; returns C - flag - episode complete
@@ -2380,32 +2415,36 @@ DebugMode:	.byte	0	; debug mode switch
 TestSoundNum:	.byte	1	; sound test number
 EpisodeDream:	.byte	0	; game episode is in dream mode (sprite colors will be only plane 0)
 
-; Episode init vars
-EListDream:	.byte	0,  1,  0
-EListPlayerX:	.byte	200., 128., 200.
-EListPlayerY:	.byte	 48.,  64.,  48.
-EListPlayerDir:	.byte	1,  1,  1
-EListPlayerSpr:	.byte	5., 5., 5.
-EListGlevX:	.byte	0.,  0., 0.
-EListGlevY:	.byte	0., 15., 0.
-		; need this for index = -1
-		.byte	TXTID_GAMEOVER
-EListMsg:	.byte	TXTID_EP0MSG, TXTID_EP1MSG, TXTID_EP2MSG
-
-; episode object changes - 02 episode (glx,gly,objnum, [type|subtype],arg#0,arg#1,coords)
-ChgObjE0201:	.byte	0,0, 0, TOBJ_ITEM*32+ITEM_LIGHT, 10., 0, 3*16.+8.
-ChgObjE0202:	.byte	2,0, 0, 0,0,0,0
-
-.even
-; ------------------------------------------------------------------------------
-; tile changing (global offset, new tile #)
-ChgTileE0201:	.word	580., 61.
-
-
 glevelX:	.byte	0
 glevelY:	.byte	0
 glevelNewX:	.byte	0
 glevelNewY:	.byte	0
+
+LightType:	.byte	0	; !=0 = flashlight is present in inventory
+		.even
+; ------------------------------------------------------------------------------
+
+DelayedMessage:	.word	0	; message # to show after delay a bit
+
+
+; Episode init consts
+EListDream:	.byte	0,  1,  0
+EListPlayerX:	.byte	200., 128., 200.
+EListPlayerY:	.byte	48., 64., 48.
+EListPlayerDir:	.byte	1, 1, 1
+EListPlayerSpr:	.byte	5., 5., 5.
+EListGlevX:	.byte	0., 0., 0.
+EListGlevY:	.byte	0., 15., 0.
+		; need this for index = -1
+		.byte	TXTID_GAMEOVER
+EListMsg:	.byte	TXTID_EP0MSG, TXTID_EP1MSG, TXTID_EP2MSG
+; episode object changes - 02 episode (glx,gly,objnum, [type|subtype],arg#0,arg#1,coords)
+ChgObjE0201:	.byte	0,0, 0, TOBJ_ITEM*32+ITEM_LIGHT, 10., 0, 3*16.+8.
+ChgObjE0202:	.byte	2,0, 0, 0,0,0,0
+		.even
+; tile changing (global offset, new tile #)
+ChgTileE0201:	.word	580., 61.
+
 
 ; player states
 PLSWALKING  = 0
@@ -2443,9 +2482,6 @@ playerAni:	.word	0
 playerItem:	.word	1		; currently selected item slot [0..7]
 playerItemNew:	.word	1		; item slot to be selected on this frame
 
-plLightType:	.word	0		; type of light around player
-					; 0-none, 1-square light, 2-light all once, 3-light all always
-
 playerLife:	.word	0
 playerLifeMax:	.word	0
 playerLifeCur:	.word	0
@@ -2467,13 +2503,13 @@ hitpointX:	.word	0		; hitting something at this point
 hitpointY:	.word	0
 
 ; some common-used variables
-varX:		.WORD	0
-varY:		.WORD	0
-varDX:		.WORD	0
-varDY:		.WORD	0
-varAddr:	.WORD	0
-varAddr2:	.WORD	0
-varAddr3:	.WORD	0
+varX:		.word	0
+varY:		.word	0
+varDX:		.word	0
+varDY:		.word	0
+varAddr:	.word	0
+varAddr2:	.word	0
+varAddr3:	.word	0
 
 
 ; enemies heighs-1 in pixels from bottom

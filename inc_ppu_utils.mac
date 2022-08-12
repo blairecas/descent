@@ -347,6 +347,29 @@ Print2Dec:
 	.even
 
 
+; prints centered string, R0 - str # or addr, R2 - Y
+CenteredStr:
+	call	SetVreg			; R4=177010, R5=177012
+	call	PrintGetR0		; R0 - vaddr
+	mov	R0, (R4)
+	clr	R1
+10$:	tstb	(R5)
+	beq	20$
+	inc	(R4)
+	inc	R1
+	br	10$
+20$:	; R1 = text size
+	mul	#6, R1			; R1 = size in pixels
+	sub	#320., R1		; R1 = (320-R1)/2 = -(R1-320)/2
+	neg	R1			;
+	asr	R1			;
+	asr	R1			; R1 = R1 / 8
+	asr	R1
+	asr	R1
+	call	PrintStr		; now R0 - addr (not #), R1-X centered, R2-Y
+	return
+	
+
 ; //////////////////////////////////////////////////////////////////////////////
 ; // SPRITE UTILS
 ; //////////////////////////////////////////////////////////////////////////////
@@ -715,8 +738,19 @@ FadeOutScreen:
 UpdItem:
 	mov	#VBuffer0, R0
 	mov	#16., R3
+	mov	#BUFWID-2, R4
+	mov	#SCRWID-2, R5
 10$:	mov	(R0)+, (R1)+
-	add	#BUFWID-2, R0
-	add	#SCRWID-2, R1
+	add	R4, R0
+	add	R5, R1
+	sob	R3, 10$
+	return
+
+; just clear item box, R1-vaddr
+ClrItem:
+	mov	#16., R3
+	mov	#SCRWID-2, R5
+10$:	clr	(R1)+
+	add	R5, R1
 	sob	R3, 10$
 	return
