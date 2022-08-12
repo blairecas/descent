@@ -252,7 +252,9 @@ MainEpisodePrepare:
 	call	ChangeGlobalObject
 	mov	#ChgTileE0201, R5	; open door
 	call	ChangeGlobalTile
-20$:	; episode variables
+20$:	; episode items
+	call	InitEpisodeItems
+	; episode variables
 	mov	Episode, R0
 	movb	EListDream(R0), EpisodeDream	; dreaming episodes?
 	; player vars prepare
@@ -302,7 +304,7 @@ MainEpisodeBeforePlay:
 	; episode #0 - show message 
 	; R1=[obj type][obj subtype], R5=msg #
 	mov	#TOBJ_FRIEND*256.+TSUB_BOSS, R1
-	mov	#9., R5
+	mov	#TXTID_MSG1, R5
 	call	EventShowMessage
 10$:	inc	CurrentMode		; next mode - > main game cycle
 	return
@@ -321,7 +323,14 @@ MainGame:
 	call	ProcessHits
 	call	ProcessObjects
 	call	ProcessPlayerOut
-	; test for game over
+	; test debug key 'next episode'
+	tstb	DebugMode
+	beq	10$
+	tst	KeyK2
+	beq	10$
+	clr	KeyK2
+	call	NextEpisode
+10$:	; test for game over
 	tst	playerLife
 	bgt	99$
 	tstb	DebugMode		; continue if debug
@@ -347,7 +356,7 @@ MainFadeOut:
 
 ; 8. - end of episode or game over prepare
 MainOverPrepare:
-	; print next episode message (or game over)
+	; print next episode message (or game over if Episode = -1)
 	mov	Episode, R1
 	clr	R0
 	bisb	EListMsg(R1), R0
@@ -1681,6 +1690,27 @@ ClearItems:
 	return
 
 
+; set items for current episode
+InitEpisodeItems:
+	call	ClearItems
+	mov	#EpisodeItems-200000, GetA12
+	mov	#Items, R5
+	clr	R4
+20$:	cmp	R4, Episode
+	beq	40$
+30$:	call	GetB12
+	bne	30$
+	inc	R4
+	br	20$
+40$:	call	GetB12
+	beq	99$
+	mov	#400, R1		; item count in hbyte = 1
+	bisb	R0, R1			; item #
+	mov	R1, (R5)+
+	br	40$
+99$:	return
+
+
 ; add item to empty slot (if any), R1 - item ID
 AddItem:
 	mov	#Items+14., R0		; searching backwards
@@ -1996,10 +2026,8 @@ ProcObjTrig:
 	blo	30$
 	mov	R4, R5
 30$:	; R5 = max distance by X or Y
-	mov	2(R0), R1		; R1 = [arg #1 | arg #0]
-	clrb	R1
-	swab	R1			; R1 = arg #1 (distance for triggers)
-	cmp	R5, R1			; check for distance
+	; R1 = [arg #1 | arg #0]
+	cmp	R5, #12.		; check for distance
 	ble	50$
 	return
 50$:	; if trigger is next episode (trigger subtype)
@@ -2007,10 +2035,30 @@ ProcObjTrig:
 	bne	60$
 	call	NextEpisode
 	return	
-60$:	; if trigger is event
+60$:	; if trigger is message
+	cmp	R2, #TRIG_MSG
+	bne	70$
+	mov	2(R0), R1		; [arg1 | arg0]
+	clr	R5
+	bisb	R1, R5			; R5 = arg #0 - message #
+	clrb	R1
+	swab	R1			; R1 = arg #1 - must split it to [type | subtype]
+	mov	R1, R4			; save for now
+	ash	#3, R4			; upper 3-bits in byte is type
+	clrb	R4			; R4 = [type | 0]
+	bic	#^B1111111111100000, R1	; get subtype (it's lower 5-bits)
+	bis	R4, R1			; now R1 is [type | subtype]
+	clr	(R0)			; clear object - message is used just once
+	call	EventShowMessage
+	return
+70$:	; if trigger is approach - then it depends on arg #0
+	cmp	R2, #TRIG_APPR
+	bne	80$
 	clr	R1
-	bisb	2(R0), R1		; R1 = arg #0 - event #
+	bisb	2(R0), R1		; R1 = event #
 	call	RunEvent
+	return
+80$:
 	return
 
 
@@ -2169,40 +2217,17 @@ CheckIntersectY:
 ; runs game event, R1=event #, R0-object addr
 ;
 RunEvent:
-	call	SetVreg
-	mov	R0, -(SP)		; save object addr
-	asl	R1
-	mov	EventsTable(R1), GetA12
-10$:	call	GetB12
-	beq	99$
-	cmpb	R0, #EVC_CLR
-	bne	20$
-	; clear trigger
-	mov	(SP), R0
-	clr	(R0)
-	br	10$
-20$:	cmpb	R0, #EVC_MSG
-	bne	30$
-	call	GetB12			; R0=msg #
-	mov	R0, R5			; R5=msg #
-	call	GetB12			; R0=obj type
-	mov	R0, R1
-	swab	R1
-	clrb	R1
-	call	GetB12			; R0=obj subtype
-	bisb	R0, R1
-	swab	R1			; R1=[obj type][obj subtype]
-	call	EventShowMessage
-	br	10$
-30$:	cmpb	R0, #EVC_EPIS0_CHK
-	bne	40$
+	mov	R0, -(SP)
+	; end of episode #0 check
+	cmp	R1, #EVC_EPIS0_CHK
+	bne	10$
 	call	Episode0EndCheck
-	bcc	10$
+	bcc	99$
 	mov	(SP), R0		; clear trigger object 
 	clr	(R0)			; if episode #0 complete
 	call	NextEpisode
 	br	99$
-40$:	; unknown event # - exiting cycle
+10$:	;
 99$:	tst	(SP)+
 	return
 
@@ -2543,9 +2568,6 @@ TilesWeight:	.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 0
 		.byte	0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; 120
 		
 
-EventsTable:
-	.word	0, EventMsg1-200000,  EventMsg2-200000, EventEpis0Chk-200000, EventMsg3-200000
-
 
 @include inc_cpu_sprites.mac
 
@@ -2575,7 +2597,13 @@ END:
 
 @include inc_levels.mac
 
-; Items take first time message IDs
+; episode's item list
+EpisodeItems:	.byte	0		; EP00
+		.byte	0		; EP01
+		.byte	ITEM_SPADE, 0	; EP02
+		.byte	0		; EP03
+
+; First-time taken items's message IDs
 ItemMessage:
 	.byte	0, TXTID_DESC_LIGHT, TXTID_DESC_SPADE, TXTID_DESC_CHERRY, 
 	.byte	0 ; no description for ore
@@ -2586,19 +2614,6 @@ ItemMessage:
 ; Taken items list (!=0 - was taken once)
 TakenItems:	.blkb	32.
 TakenItemsEnd:
-
-; 'get me ore' message
-EventMsg1:
-	.byte	EVC_CLR,   EVC_MSG,9.,TOBJ_FRIEND,0,   0
-; 'need a light' message
-EventMsg2:
-	.byte	EVC_CLR,   EVC_MSG,10.,0,0,    0
-; check for episode 0 end (remove ore)
-EventEpis0Chk:
-	.byte	EVC_EPIS0_CHK, 0
-; Yana's message 'do what you must'
-EventMsg3:
-	.byte	EVC_CLR,  EVC_MSG,TXTID_YANA01,TOBJ_FRIEND,0,	0
 
 
 ENDVram12:

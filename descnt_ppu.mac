@@ -927,8 +927,8 @@ SND005:	.word	SND_TONE, 04, 9*256, +4*256, 250*256, -40*256, 230*256, -35*256
 
 @include inc_ppu_sprites.mac	
 
-TxtTable:	.word	TXT_Menu00, TXT_Menu01, TXT_Menu02, TXT_Menu03, TXT_Menu04, TXT_MENU05, TXT_Menu06, TXT_Menu07, TXT_Pre_Intro, TXT_Msg1
-		.word	TXT_Msg2, TXT_Game_Over, TXT_Msg3, TXT_Msg4, TXT_Ep1Msg, TXT_Ep2Msg, TXT_Yana01, TXT_CantLight, 0, 0
+TxtTable:	.word	TXT_Menu00, TXT_Menu01, TXT_Menu02, TXT_Menu03, TXT_Menu04, TXT_MENU05, TXT_Menu06, TXT_Menu07, TXT_Pre_Intro, TXT_Game_Over, 
+		.word	TXT_Msg1, TXT_Msg2, TXT_Msg3, TXT_Ep0End, TXT_Ep1Msg, TXT_Ep2Msg, TXT_Yana01, TXT_CantLight, 0, 0
 		.word	TXT_Desc_Light, TXT_Desc_Spade, TXT_Desc_Cherry
 
 
@@ -969,7 +969,7 @@ TXT_Game_Over:	.asciz	<7>"Тут и сказочке конец"
 TXT_Msg1:	.asciz	<3>"Твоя смена. Лопата в шахте"<12><3>"Накопанное "<7>"принесешь мне"
 TXT_Msg2:	.asciz	<2>"Тут темно и опасно"<12><2>"Нужен какой-то"<12><7>"источник света"
 TXT_Msg3:	.asciz	<3>"Маловато будет"<12><3>"Копай дальше"
-TXT_Msg4:	.asciz	<3>"Молодец.."<12><3>"Ложись спать"
+TXT_Ep0End:	.asciz	<3>"Молодец.."<12><3>"Ложись спать"
 TXT_Ep1Msg:	.asciz	<1>"- Где-то во сне -"
 TXT_Ep2Msg:	.asciz	<7>"- Ночь продолжается -"
 TXT_Yana01:	.asciz	<1>"..проснись.."<12><1>"..сделай то, что должен"
