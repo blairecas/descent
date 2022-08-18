@@ -688,35 +688,35 @@ TilesAddr:
 	.BYTE	0, 2, 2, 2, 2, 0, 233, 374
 	.BYTE	0, 40, 40, 40, 40, 0, 251, 113
 ; 043
+	.BYTE	340, 7, 342, 7, 2, 2, 375, 277
+	.BYTE	40, 40, 40, 40, 40, 40, 376, 317
+	.BYTE	0, 2, 2, 2, 2, 2, 233, 257
+	.BYTE	40, 40, 40, 40, 40, 40, 331, 254
+; 044
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 10, 0, 0, 0
 	.BYTE	0, 0, 0, 10, 0, 0, 0, 0
-; 044
+; 045
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	2, 0, 0, 0, 0, 0, 40, 40
 	.BYTE	0, 40, 0, 0, 0, 0, 2, 0
-; 045
-	.BYTE	200, 0, 0, 1, 0, 0, 324, 52
-	.BYTE	40, 0, 240, 41, 340, 3, 314, 257
-	.BYTE	300, 3, 302, 3, 200, 1, 230, 54
-	.BYTE	0, 0, 40, 0, 0, 0, 0, 2
 ; 046
-	.BYTE	0, 1, 0, 0, 0, 1, 124, 52
-	.BYTE	140, 0, 240, 41, 340, 3, 314, 257
-	.BYTE	300, 3, 302, 3, 200, 1, 230, 54
-	.BYTE	0, 0, 40, 0, 0, 0, 0, 2
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 ; 047
-	.BYTE	200, 0, 0, 1, 0, 0, 124, 52
-	.BYTE	40, 2, 240, 41, 340, 3, 314, 257
-	.BYTE	300, 3, 302, 3, 200, 1, 230, 54
-	.BYTE	0, 0, 40, 0, 0, 0, 0, 2
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 ; 048
-	.BYTE	0, 1, 200, 0, 0, 0, 124, 53
-	.BYTE	40, 0, 240, 41, 340, 3, 314, 257
-	.BYTE	300, 3, 302, 3, 200, 1, 230, 54
-	.BYTE	0, 0, 40, 0, 0, 0, 0, 2
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 ; 049
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
@@ -746,7 +746,7 @@ TilesAddr:
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 104, 104, 22, 201
+	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 ; 055
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
@@ -773,45 +773,45 @@ TilesAddr:
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 ; 060
-	.BYTE	76, 0, 134, 0, 30, 0, 30, 0
-	.BYTE	30, 10, 34, 0, 34, 0, 30, 0
-	.BYTE	30, 1, 34, 0, 34, 0, 34, 0
-	.BYTE	30, 20, 30, 0, 30, 0, 76, 1
+	.BYTE	16, 160, 16, 162, 16, 162, 176, 173
+	.BYTE	56, 160, 56, 160, 56, 160, 314, 76
+	.BYTE	14, 62, 16, 162, 16, 160, 236, 174
+	.BYTE	16, 160, 56, 160, 56, 160, 256, 173
 ; 061
-	.BYTE	376, 177, 314, 114, 104, 104, 104, 104
-	.BYTE	104, 104, 374, 177, 314, 114, 104, 4
-	.BYTE	104, 4, 104, 4, 374, 177, 314, 114
-	.BYTE	104, 104, 104, 104, 104, 104, 376, 177
+	.BYTE	377, 377, 316, 114, 106, 104, 106, 104
+	.BYTE	106, 104, 376, 177, 316, 114, 106, 4
+	.BYTE	106, 4, 106, 4, 376, 177, 316, 114
+	.BYTE	106, 104, 106, 104, 106, 104, 377, 377
 ; 062
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 ; 063
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 2, 137, 374, 77, 34, 0
+	.BYTE	34, 0, 34, 0, 2, 136, 374, 77
+	.BYTE	34, 0, 34, 0, 34, 10, 34, 14
+	.BYTE	34, 16, 34, 0, 34, 0, 0, 76
 ; 064
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 104, 104, 22, 201
 ; 065
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 202, 20, 100, 44
 ; 066
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 104, 41, 42, 10
 ; 067
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
-	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
+	.BYTE	0, 0, 0, 0, 6, 104, 40, 21
 ; 068
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
 	.BYTE	0, 0, 0, 0, 0, 0, 0, 0
@@ -1236,9 +1236,15 @@ SpritesData:
 	.word	177770, 20520, 177774, 520, 177776, 41234, 177676, 1210
 	.word	173632, 1210
 ; 028
-	.word	0, 0
+	.word	14200, 4000, 14700, 4200, 15743, 4502, 157763, 104642
+	.word	157763, 104242, 157766, 104144, 147767, 102005, 143775, 41031
+	.word	61777, 20002, 37776, 16534, 17770, 16530, 36774, 20004
+	.word	61776, 41272, 141737, 101505, 143047, 102003, 2003, 2002
 ; 029
-	.word	0, 0
+	.word	214, 10, 714, 210, 61754, 20510, 63774, 20650
+	.word	63777, 20251, 33777, 10151, 173773, 50021, 157763, 46041
+	.word	66743, 20002, 37776, 16534, 17774, 6534, 16776, 10002
+	.word	37743, 27241, 76741, 50540, 71060, 60020, 30020, 20020
 ; 030
 	.word	0, 0
 ; 031
@@ -1467,15 +1473,15 @@ SpritesData:
 SpritesAddr:
 	.word	SpritesData+0, SpritesData+100, SpritesData+174, SpritesData+274, SpritesData+370, SpritesData+464, SpritesData+564, SpritesData+660, SpritesData+754, SpritesData+1054
 	.word	SpritesData+1150, SpritesData+1240, SpritesData+1340, SpritesData+1434, SpritesData+1514, SpritesData+1520, SpritesData+1524, SpritesData+1530, SpritesData+1534, SpritesData+1540
-	.word	SpritesData+1544, SpritesData+1600, SpritesData+1650, SpritesData+1704, SpritesData+1754, SpritesData+2024, SpritesData+2070, SpritesData+2140, SpritesData+2204, SpritesData+2210
-	.word	SpritesData+2214, SpritesData+2220, SpritesData+2314, SpritesData+2414, SpritesData+2510, SpritesData+2604, SpritesData+2704, SpritesData+3000, SpritesData+3004, SpritesData+3010
-	.word	SpritesData+3014, SpritesData+3020, SpritesData+3024, SpritesData+3030, SpritesData+3034, SpritesData+3040, SpritesData+3044, SpritesData+3050, SpritesData+3054, SpritesData+3060
-	.word	SpritesData+3064, SpritesData+3070, SpritesData+3074, SpritesData+3100, SpritesData+3104, SpritesData+3110, SpritesData+3114, SpritesData+3120, SpritesData+3124, SpritesData+3130
-	.word	SpritesData+3134, SpritesData+3140, SpritesData+3144, SpritesData+3150, SpritesData+3154, SpritesData+3160, SpritesData+3164, SpritesData+3170, SpritesData+3174, SpritesData+3200
+	.word	SpritesData+1544, SpritesData+1600, SpritesData+1650, SpritesData+1704, SpritesData+1754, SpritesData+2024, SpritesData+2070, SpritesData+2140, SpritesData+2204, SpritesData+2304
+	.word	SpritesData+2404, SpritesData+2410, SpritesData+2504, SpritesData+2604, SpritesData+2700, SpritesData+2774, SpritesData+3074, SpritesData+3170, SpritesData+3174, SpritesData+3200
 	.word	SpritesData+3204, SpritesData+3210, SpritesData+3214, SpritesData+3220, SpritesData+3224, SpritesData+3230, SpritesData+3234, SpritesData+3240, SpritesData+3244, SpritesData+3250
 	.word	SpritesData+3254, SpritesData+3260, SpritesData+3264, SpritesData+3270, SpritesData+3274, SpritesData+3300, SpritesData+3304, SpritesData+3310, SpritesData+3314, SpritesData+3320
 	.word	SpritesData+3324, SpritesData+3330, SpritesData+3334, SpritesData+3340, SpritesData+3344, SpritesData+3350, SpritesData+3354, SpritesData+3360, SpritesData+3364, SpritesData+3370
 	.word	SpritesData+3374, SpritesData+3400, SpritesData+3404, SpritesData+3410, SpritesData+3414, SpritesData+3420, SpritesData+3424, SpritesData+3430, SpritesData+3434, SpritesData+3440
 	.word	SpritesData+3444, SpritesData+3450, SpritesData+3454, SpritesData+3460, SpritesData+3464, SpritesData+3470, SpritesData+3474, SpritesData+3500, SpritesData+3504, SpritesData+3510
-	.word	SpritesData+3514, SpritesData+3520, SpritesData+3524, SpritesData+3530, SpritesData+3534, SpritesData+3540, SpritesData+3544, SpritesData+3550, SpritesData+3554, SpritesData+3654
+	.word	SpritesData+3514, SpritesData+3520, SpritesData+3524, SpritesData+3530, SpritesData+3534, SpritesData+3540, SpritesData+3544, SpritesData+3550, SpritesData+3554, SpritesData+3560
+	.word	SpritesData+3564, SpritesData+3570, SpritesData+3574, SpritesData+3600, SpritesData+3604, SpritesData+3610, SpritesData+3614, SpritesData+3620, SpritesData+3624, SpritesData+3630
+	.word	SpritesData+3634, SpritesData+3640, SpritesData+3644, SpritesData+3650, SpritesData+3654, SpritesData+3660, SpritesData+3664, SpritesData+3670, SpritesData+3674, SpritesData+3700
+	.word	SpritesData+3704, SpritesData+3710, SpritesData+3714, SpritesData+3720, SpritesData+3724, SpritesData+3730, SpritesData+3734, SpritesData+3740, SpritesData+3744, SpritesData+4044
 

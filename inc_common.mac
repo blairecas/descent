@@ -32,6 +32,7 @@ CmdDrawLifeBgr    = 27.		; draws player life bar background
 CmdDrawLifeCur    = 28.		; draws current life line
 CmdClrScrBottom   = 29.		; clear last 12 lines of screen vmem
 CmdPrint2Dec      = 30.		; prints 2-digits decimal
+CmdSoundOnOff	  = 31.		; sets sound on or off
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -81,6 +82,7 @@ TOBJ_TRIG	= 3
 ; (!) change tables in obj processing if changing here (!)
 TSUB_BOSS	= 0
 TSUB_SPIDER1	= 0
+TSUB_SPIDER2	= 1
 
 ; (!) change table in item processing if changing here (!) (and in item messages table)
 ITEM_LIGHT	= 1
@@ -117,16 +119,17 @@ SND_MAX		= 5
 ; // Text strings IDs
 ; //////////////////////////////////////////////////////////////////////////////
 
-TXTID_EP0MSG	= 8.
-TXTID_GAMEOVER  = 9.
-TXTID_MSG1	= 10.
-TXTID_MSG2	= 11.
-TXTID_MSG3	= 12.
-TXTID_EP0END	= 13.
-TXTID_EP1MSG	= 14.
-TXTID_EP2MSG	= 15.
-TXTID_YANA01	= 16.
-TXTID_CANTLIGHT = 17.
+TXTID_EP0MSG	= 9.
+TXTID_GAMEOVER  = 10.
+TXTID_MSG1	= 11.
+TXTID_MSG2	= 12.
+TXTID_MSG3	= 13.
+TXTID_EP0END	= 14.
+TXTID_EP1MSG	= 15.
+TXTID_EP2MSG	= 16.
+TXTID_EP3MSG	= 17.
+TXTID_YANA01	= 18.
+TXTID_CANTLIGHT = 19.
 
 TXTID_DESC_LIGHT  = 20.
 TXTID_DESC_SPADE  = 21.

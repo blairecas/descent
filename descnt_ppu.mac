@@ -125,6 +125,7 @@ CommandsTable:
 	.word	DrawLifeCur		; 28. draw player life line
 	.word	ClrScrBottom		; 29. clear last 12 lines of screen vmem
 	.word	Print2Dec		; 30. prints 2-digits decimal
+	.word	SoundOnOff		; 31. sets sound on or off
 
 	
 ; //////////////////////////////////////////////////////////////////////////////
@@ -239,8 +240,28 @@ SndLDh:		.word	0		; high level length addition
 SndIntLCnt:	.word	0
 
 
+; R0 <> 0 = No Sound
+; And need to change menu colors: Txt_Menu4 - 15 / 21 pos
+SoundOnOff:
+	call	SetVreg
+	movb	R0, NoSound
+	bne	10$
+	mov	#TXT_Menu04+15., (R4)
+	movb	#7., (R5)
+	mov	#TXT_Menu04+21., (R4)
+	movb	#1., (R5)
+	return
+10$:	mov	#TXT_Menu04+15., (R4)
+	movb	#1., (R5)
+	mov	#TXT_Menu04+21., (R4)
+	movb	#7., (R5)
+	return
+
+
 ; start sound, R0 - sound #
 SNDSTA:	mtps	#600			; stop interrupts just in case
+	tstb	NoSound
+	bne	99$
 	call	PPTINI			; init timer (stops previous sounds)
 	clr	MUSCUR			; stop music
 	asl	R0
@@ -313,6 +334,8 @@ SndIntHi:
 
 ; start music, R0 - music #
 MUSSTA:	mtps	#600			; stop interrupts
+	tstb	NoSound
+	bne	99$
 	call	PPTINI			; init pp timer
 	tst	R0			; 0 - stop music
 	bne	10$
@@ -329,7 +352,7 @@ MUSSTA:	mtps	#600			; stop interrupts
 	tst	@#177714
 	mov	#MusIntLo, @#304	; set music interrupt
 	bis	#^B01000001, @#177710	; allow int, start, timer = 2mks, 500000 ticks per second
-	mtps	#0
+99$:	mtps	#0
 	return
 
 ; mus processor
@@ -782,6 +805,8 @@ Unpa01:	CLR	R5		; no nibbles sign
 
 .radix 10
 
+NoSound:	.byte	0
+
 ; C             D             E      F             G             A             B
 ; C4-37 C#4-38  D4-39 D#4-40  E4-41  F4-42 F#4-43  G4-44 G#4-45  A4-46 A#4-47  B4-48
 ; C3-25 C#3-26  D3-27 D#3-28  E3-29  F3-30 F#3-31  G3-32 G#3-33  A3-34 A#3-35  B3-36
@@ -927,8 +952,8 @@ SND005:	.word	SND_TONE, 04, 9*256, +4*256, 250*256, -40*256, 230*256, -35*256
 
 @include inc_ppu_sprites.mac	
 
-TxtTable:	.word	TXT_Menu00, TXT_Menu01, TXT_Menu02, TXT_Menu03, TXT_Menu04, TXT_MENU05, TXT_Menu06, TXT_Menu07, TXT_Pre_Intro, TXT_Game_Over, 
-		.word	TXT_Msg1, TXT_Msg2, TXT_Msg3, TXT_Ep0End, TXT_Ep1Msg, TXT_Ep2Msg, TXT_Yana01, TXT_CantLight, 0, 0
+TxtTable:	.word	TXT_Menu00, TXT_Menu01, TXT_Menu02, TXT_Menu03, TXT_Menu04, TXT_MENU05, TXT_Menu06, TXT_Menu07, TXT_Menu08, TXT_Pre_Intro
+		.word	TXT_Game_Over, TXT_Msg1, TXT_Msg2, TXT_Msg3, TXT_Ep0End, TXT_Ep1Msg, TXT_Ep2Msg, TXT_Ep3Msg, TXT_Yana01, TXT_CantLight
 		.word	TXT_Desc_Light, TXT_Desc_Spade, TXT_Desc_Cherry
 
 
@@ -958,20 +983,22 @@ TXT_Menu00:	.asciz	<7>"<>'`"<5>" - "<6>"Движение"
 TXT_Menu01:	.asciz	<7>"1..8"<5>" - "<6>"Предмет"
 TXT_Menu02:	.asciz	<7>" РЕГ"<5>" - "<6>"Использовать"
 TXT_Menu03:	.asciz	<7>"  К1"<5>" - "<6>"Палитра "<4>"R"<2>"G"<1>"B"<6>"/"<2>"G"<4>"R"<1>"B"
-TXT_Menu04:	.asciz	<7>" УСТ"<5>" - "<6>"Пауза"
-TXT_Menu05:	.asciz	<7>"СТОП"<5>" - "<6>"Сброс игры"
-TXT_Menu06:	.asciz	<7>" <>`"<5>" - "<6>"Тест звука:"
-TXT_Menu07:	.asciz	<6>" НАЖМИТЕ "<7>"ПРОБЕЛ"
+TXT_Menu04:	.asciz	<7>"  K2"<5>" - "<6>"Звук "<7>"Вкл"<6>"/"<1>"Выкл"
+TXT_Menu05:	.asciz	<7>" УСТ"<5>" - "<6>"Пауза"
+TXT_Menu06:	.asciz	<7>"СТОП"<5>" - "<6>"Сброс игры"
+TXT_Menu07:	.asciz	<7>" <>`"<5>" - "<6>"Тест звука:"
+TXT_Menu08:	.asciz	<6>" НАЖМИТЕ "<7>"ПРОБЕЛ"
 
 TXT_Pre_Intro:	.asciz	<7>"- Ночная смена -"
 TXT_Game_Over:	.asciz	<7>"Тут и сказочке конец"
 
-TXT_Msg1:	.asciz	<3>"Твоя смена. Лопата в шахте"<12><3>"Накопанное "<7>"принесешь мне"
+TXT_Msg1:	.asciz	<3>"Твоя смена. Лопата в шахте"<12><3>"Накопай 30 кубометров"<12><3>"и "<7>"принеси мне"
 TXT_Msg2:	.asciz	<2>"Тут темно и опасно"<12><2>"Нужен какой-то"<12><7>"источник света"
 TXT_Msg3:	.asciz	<3>"Маловато будет"<12><3>"Копай дальше"
 TXT_Ep0End:	.asciz	<3>"Молодец.."<12><3>"Ложись спать"
 TXT_Ep1Msg:	.asciz	<1>"- Где-то во сне -"
 TXT_Ep2Msg:	.asciz	<7>"- Ночь продолжается -"
+TXT_Ep3Msg:	.asciz	<2>"- Тестовый -"
 TXT_Yana01:	.asciz	<1>"..проснись.."<12><1>"..сделай то, что должен"
 TXT_CantLight:	.asciz	<2>"А здесь всё освещено"
 

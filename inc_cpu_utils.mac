@@ -295,7 +295,7 @@ DrawLifeLine:
 PrintSoundNum:
 	movb	TestSoundNum, R0	; high-byte must be 0
 	mov	#27., R1
-	mov	#180., R2
+	mov	#190., R2
 	.ppexe	#CmdPrint2Dec
 	return
 

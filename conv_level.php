@@ -69,7 +69,10 @@
 				$result = eval('$v = '.$s.';');
 				$err = ob_get_contents();
 				ob_end_flush();
-				if (strlen($err) > 0) echo "(!!!) ERROR in EVAL: $line\n";
+				if (strlen($err) > 0) {
+					echo "(!!!) ERROR in EVAL: $line\n";
+					exit(1);
+				}
 			}
 			if ($v > 255) {
 				echo "(!!!) ERROR: value > 255\n$line\n";
