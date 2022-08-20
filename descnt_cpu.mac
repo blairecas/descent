@@ -265,11 +265,13 @@ MainEpisodePrepare:
 	mov	#ChgTileE0201, R5	; open door
 	call	ChangeGlobalTile
 20$:	; episode items
-;	call	InitEpisodeItems
+	call	RestoreItems		; restore items if they were backed up
 	; episode variables
 	mov	Episode, R0
 	movb	EListDream(R0), EpisodeDream	; dreaming episodes?
-	; player vars prepare
+	beq	30$
+	call	BackupItems		; backup items before 'dream' episode
+30$:	; player vars prepare
 	clr	playerX
 	clr	playerY
 	movb	EListPlayerX(R0), playerX
@@ -1725,6 +1727,30 @@ ClearItems:
 	return
 
 
+; backup and clear items and set flag that they were backup'ed
+BackupItems:
+	mov	#Items, R1
+	mov	#ItemsBackup, R2
+	mov	#8., R3
+10$:	mov	(R1), (R2)+
+	clr	(R1)+
+	sob	R3, 10$
+	incb	ItemsWereBkp
+	return
+
+; restore items from backup and clear flag that they were backup'ed
+RestoreItems:
+	tstb	ItemsWereBkp
+	beq	99$
+	clrb	ItemsWereBkp
+	mov	#ItemsBackup, R1
+	mov	#Items, R2
+	mov	#8., R3
+10$:	mov	(R1)+, (R2)+
+	sob	R3, 10$
+99$:	return
+
+
 ; set items for current episode - do we need that really?
 ;InitEpisodeItems:
 ;	call	ClearItems
@@ -2023,6 +2049,7 @@ ProcObjItem:
 	mov	#ItemMessage-200000, GetA12
 	add	R5, GetA12
 	call	GetB12			; R0 = message ID
+	incb	MessageNosound		; must show without sound
 	mov	R0, DelayedMessage	; will show description with delay a bit
 	; ===
 99$:	return
@@ -2308,8 +2335,18 @@ RunEvent:
 
 
 ; show message for events (or just show it)
-; R1=[obj type][obj subtype], R5=msg #
+; R1=[obj type][obj subtype], R5=msg # (upper bit set = nosound)
 EventShowMessage:
+	; play default sound?
+	tstb	MessageNosound
+	bne	10$
+	mov	R0, -(SP)
+	mov	R5, -(SP)
+	mov	#SND_MSGBOX, R0
+	.ppexe	#CmdSoundPlay
+	mov	(SP)+, R5
+	mov	(SP)+, R0
+10$:	clrb	MessageNosound
 	; try to find such object 
 	call	ObjFindByType		; returns R0=obj addr or #playerObj if notfound
 	mov	4(R0), R1		; X coord in buffer
@@ -2513,8 +2550,10 @@ Pause:		.byte	0	; <>0 - paused
 RgbMode:	.byte	0	; RGB/GRB switch
 DebugMode:	.byte	0	; debug mode switch
 NoSound:	.byte	0	; <>0 - sound procedures will not start
+MessageNosound:	.byte	0	; <>0 - next message will be without default sound
 TestSoundNum:	.byte	1	; sound test number
 EpisodeDream:	.byte	0	; game episode is in dream mode (sprite colors will be only plane 0)
+ItemsWereBkp:	.byte	0	; <>0 - items were backed up (for 'dream' episode)
 
 glevelX:	.byte	0
 glevelY:	.byte	0
@@ -2595,6 +2634,7 @@ PlayerObjectEnd:
 
 ; player item objects [0..7] (selected with 1..8), low byte - item #, high byte - item count
 Items:		.word	0, 0, 0, 0, 0, 0, 0, 0
+ItemsBackup:	.word	0, 0, 0, 0, 0, 0, 0, 0	; 'dream' episodes are without items
 
 		;	0    1    2    3    4
 ItemBaseSpr:	.byte	00., 10., 11., 12., 13.

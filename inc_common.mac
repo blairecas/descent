@@ -112,8 +112,9 @@ SND_SPADEING	= 2
 SND_ADDITEM	= 3
 SND_EAT		= 4
 SND_REMOVEITEM	= 5
+SND_MSGBOX	= 6
 
-SND_MAX		= 5
+SND_MAX		= 6
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Text strings IDs

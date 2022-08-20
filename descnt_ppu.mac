@@ -210,7 +210,7 @@ SNDADR:	.word	0
 ; music list addrs
 MUSTAB:	.word	0, MUS001
 ; sound list addrs
-SNDTAB:	.word	0, SND001, SND002, SND003, SND004, SND005
+SNDTAB:	.word	0, SND001, SND002, SND003, SND004, SND005, SND006
 
 .radix 10
 
@@ -238,7 +238,6 @@ SndLDl:		.word	0		; low level length addition
 SndLHi:		.word	0		; high level length
 SndLDh:		.word	0		; high level length addition
 SndIntLCnt:	.word	0
-
 
 ; R0 <> 0 = No Sound
 ; And need to change menu colors: Txt_Menu4 - 15 / 21 pos
@@ -268,9 +267,14 @@ SNDSTA:	mtps	#600			; stop interrupts just in case
 	mov	SNDTAB(R0), R0		; sound addr
 	beq	99$			; maybe just exit? (can be used to stop sound)
 	call	SndSetVars
-	mov	#SndIntLo, @#304	; set sound interrupt to low signal proc
-	mov	#1, @#177712		; timer counter to minimum
-	tst	@#177714
+	cmp	SndType, #SND_PAUSE
+	bne	10$
+	mov	#SndIntPause, @#304	; set sound interrupt to pause
+	mov	#SND_PAUSE_TIMER, @#177712
+	br	30$
+10$:	mov	#SndIntLo, @#304	; set sound interrupt to low signal proc
+20$:	mov	#1, @#177712		; timer counter to minimum
+30$:	tst	@#177714
 	tst	@#177714
 	bis	#^B01000011, @#177710	; allow int, start, timer = 4mks, 250000 ticks per second
 99$:	mtps	#0
@@ -280,15 +284,49 @@ SndSetVars:
 	mov	(R0)+, SndType		; type of sound effect
 	beq	99$			; none - exit
 	mov	(R0)+, SndTCnt		; total counter
+	cmp	SndType, #SND_PAUSE	; pause type just have counter
+	beq	90$
 	mov	(R0)+, SndLCnt		; local counter
 	mov	(R0)+, SndLDCnt		; local counter addition
 	mov	(R0)+, SndLLo		; low level duration
 	mov	(R0)+, SndLDl		; low level duration addition
 	mov	(R0)+, SndLHi		; high level duration
 	mov	(R0)+, SndLDh		; high level duration addition
-	mov	R0, SNDADR		; store next effect addr
+90$:	mov	R0, SNDADR		; store next effect addr
 	mov	SndLCnt, SndIntLCnt	; set local counter to interrupt procedure		
 99$:	return	
+
+
+; PP timer interrupt for pause
+SndIntPause:
+	dec	SndTCnt
+	bpl	90$
+	mov	R0, -(SP)
+	mov	SNDADR, R0
+	call	SndSetVars
+	mov	(SP)+, R0
+	tst	SndType
+	bne	10$
+	; no next effect - stop timer
+	clr	@#177710
+	tst	@#177714
+	tst	@#177714
+	rti
+10$:	cmp	SndType, #SND_PAUSE	; still pause?
+	beq	90$
+	; normal tone
+	mov	#SndIntLo, @#304	; set interrupt to low tick
+	movb	SndLLo+1, @#22$+2	; only high-byte used
+22$:	mov	#000000, @#177712
+	tst	@#177714
+	tst	@#177714
+	rti
+	; still pause
+90$:	mov	#SND_PAUSE_TIMER, @#177712	; set default pause timer
+	tst	@#177714
+	tst	@#177714
+	rti
+
 
 ; PP timer interrupts for sounds
 SndIntLo:
@@ -311,9 +349,17 @@ SndIntLo:
 	call	SndSetVars
 	mov	(SP)+, R0
 	tst	SndType
-	bne	90$
+	bne	10$
 	; no next effect - stop timer
 	clr	@#177710
+	tst	@#177714
+	tst	@#177714
+	rti
+10$:	; is it pause
+	cmp	SndType, #SND_PAUSE
+	bne	90$
+	mov	#SndIntPause, @#304	; set sound interrupt to pause
+	mov	#SND_PAUSE_TIMER, @#177712
 	tst	@#177714
 	tst	@#177714
 	rti
@@ -919,11 +965,14 @@ MUS001:
 
 
 SND_TONE = 1
+SND_PAUSE = 2
+
+SND_PAUSE_TIMER	= 100*256
 
 ; TYPE: SND_TONE
 ; ARGS: TCNT  = total repeats count (use additions every cycle)
-;       LCNT  = local repeats count
-;	LDCNT = local repeats addition
+;       LCNT  = local repeats count (only h-byte is used, 127 max)
+;	LDCNT = local repeats addition 
 ;       Lo = low signal [______/'''''''] length
 ;       Dl = addition to Lo
 ;	Hi = high signal length
@@ -943,6 +992,11 @@ SND004:	.word	SND_TONE, 06, 10*256, -1*256, 100*256, 20*256, 10*256, 40*256
 	.word	0
 ; remove item
 SND005:	.word	SND_TONE, 04, 9*256, +4*256, 250*256, -40*256, 230*256, -35*256
+	.word	0
+; message box
+SND006:	.word	SND_TONE, 1, 15*256, 0, 30000, 0, 30000, 0
+	.word	SND_PAUSE, 8
+	.word	SND_TONE, 1, 10*256, 0, 30000, 0, 30000, 0
 	.word	0
 
 .radix 8
