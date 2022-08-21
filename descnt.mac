@@ -708,8 +708,8 @@ PPPG10:	mov	#BUF002/2, R0		; source addr in CPU
 ; //////////////////////////////////////////////////////////////////////////////
 
 PPUST2:
-	CLR	R0
-	CALL	@7132(R0)
+	CLR	R0		; I dunno what is here? Alex_K said DO THAT
+	CALL	@7132(R0)	; and it's working! stopping FD motor
 
 	; set PSW (HP**TNZVC) = 110000000 (HP=11, disable interrupts, halt mode)
 	mtps	#600
