@@ -2241,9 +2241,9 @@ ProcSpider2:
 	call	CheckAvail
 	bcs	20$
 	add	#2, 6(R5)			; write Y back
-	return
+	br	70$
 20$:	bis	#^B1000000000000000, 2(R5)	; change direction to 'up'
-	return
+	br	70$
 50$:	; check upper screen boundary
 ;	cmp	R2, #2.
 ;	ble	60$
@@ -2252,8 +2252,30 @@ ProcSpider2:
 	call	CheckAvail
 	bcs	60$
 	sub	#2, 6(R5)
-	return
+	br	70$
 60$:	bic	#^B1000000000000000, 2(R5)	; change direction to 'up'
+70$:	; need to set tiles with/without web
+	; (!) assume spider will never be at very top|bottom|left|right on screen 
+	mov	4(R5), R3
+	mov	6(R5), R4
+	dec	R4			; Y-1
+	bic	#^B1111, R4		; R4 = levelY*16
+	ash	#-4, R3			; R3 = levelX
+	add	R3, R4			; level offset in units
+	asl	R4			; level offset in words
+	mov	Level(R4), R0		; (!) don't forget use only tile byte
+	cmpb	R0, #9.			; modify only 'grassed' tiles
+	bhi	72$
+	add	#70., Level(R4)
+	bis	#^B1000000000000000, Level(R4)
+72$:	mov	Level+32.(R4), R0	; remove web from bottom of spider
+	cmpb	R0, #70.
+	blo	74$
+	cmpb	R0, #77.
+	bhi	74$
+	sub	#70., R0
+	mov	R0, Level+32.(R4)
+74$:	;
 	return
 
 
@@ -2569,11 +2591,11 @@ DelayedMessage:	.word	0	; message # to show after delay a bit
 
 ; Episode init consts
 EListDream:	.byte	0,  1,  0,  0
-EListPlayerX:	.byte	200., 128., 200., 64.
-EListPlayerY:	.byte	48., 64., 48., 48.
+EListPlayerX:	.byte	200., 128., 200., 15.*16.
+EListPlayerY:	.byte	48., 64., 48., 8.*16.
 EListPlayerDir:	.byte	1, 1, 1, 1
 EListPlayerSpr:	.byte	5., 5., 5., 5.
-EListGlevX:	.byte	0., 0., 0., 2.
+EListGlevX:	.byte	0., 0., 0., 1.
 EListGlevY:	.byte	0., 15., 0., 1.
 		; need this for index = -1
 		.byte	TXTID_GAMEOVER
@@ -2663,7 +2685,7 @@ EnemiesAttack:	.byte	8.		; spider 1
 		.even
 
 
-		; bits: 7 6 5 4 [3 2] [1 0]
+		; bits: 7 6 5 4 3 2 [1 0]
 		; 7 - 'current frame' draw flag, 6 - 'previous frame'
 		; 5 - darken tile
 		; 4 - hazardous
