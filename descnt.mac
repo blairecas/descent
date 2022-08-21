@@ -707,7 +707,11 @@ PPPG10:	mov	#BUF002/2, R0		; source addr in CPU
 ; // PPU second phase prepare
 ; //////////////////////////////////////////////////////////////////////////////
 
-PPUST2:	; set PSW (HP**TNZVC) = 110000000 (HP=11, disable interrupts, halt mode)
+PPUST2:
+	CLR	R0
+	CALL	@7132(R0)
+
+	; set PSW (HP**TNZVC) = 110000000 (HP=11, disable interrupts, halt mode)
 	mtps	#600
 	; 11 110 001 (all RAM banks of plane 0)
         ; WARNING !!! We can't read (and bit/tst so on..) from there, but CAN write
