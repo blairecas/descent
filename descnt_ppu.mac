@@ -210,7 +210,7 @@ SNDADR:	.word	0
 ; music list addrs
 MUSTAB:	.word	0, MUS001
 ; sound list addrs
-SNDTAB:	.word	0, SND001, SND002, SND003, SND004, SND005, SND006
+SNDTAB:	.word	0, SND001, SND002, SND003, SND004, SND005, SND006, SND007
 
 .radix 10
 
@@ -273,10 +273,11 @@ SNDSTA:	mtps	#600			; stop interrupts just in case
 	mov	#SND_PAUSE_TIMER, @#177712
 	br	30$
 10$:	mov	#SndIntLo, @#304	; set sound interrupt to low signal proc
-20$:	mov	#1, @#177712		; timer counter to minimum
+	movb	SndLLo+1, @#20$+2	; only high-byte used
+20$:	mov	#000000, @#177712	; initial timer counter
 30$:	tst	@#177714
 	tst	@#177714
-	bis	#^B01000011, @#177710	; allow int, start, timer = 4mks, 250000 ticks per second
+	bis	#^B01000101, @#177710	; allow int, start, timer = 8mks
 99$:	mtps	#0
 	return
 
@@ -300,7 +301,7 @@ SndSetVars:
 ; PP timer interrupt for pause
 SndIntPause:
 	dec	SndTCnt
-	bpl	90$
+	bne	90$
 	mov	R0, -(SP)
 	mov	SNDADR, R0
 	call	SndSetVars
@@ -334,7 +335,7 @@ SndIntLo:
 	mov	#SndIntHi, @#304	; set next interrupt to high-level version
 	; cycle without changes to low|high durations
 	decb	SndIntLCnt+1		; (!) only h-byte is used
-	bpl	90$
+	bne	90$
 	; change durations of low|high
 	add	SndLDl, SndLLo		; additions to low|high durations
 	add	SndLDh, SndLHi		;
@@ -342,7 +343,7 @@ SndIntLo:
 	mov	SndLCnt, SndIntLCnt	; restore local cycles count
 	; end of effect?
 	dec	SndTCnt
-	bpl	90$
+	bne	90$
 	; try next effect
 	mov	R0, -(SP)
 	mov	SNDADR, R0
@@ -370,7 +371,7 @@ SndIntLo:
 	rti
 SndIntHi:
 	bis	#200, @#177716
-	mov	#SndIntLo, @#304
+	mov	#SndIntLo, @#304	; next tick will be low
 	movb	SndLHi+1, @#92$+2
 92$:	mov	#000000, @#177712
 	tst	@#177714
@@ -397,7 +398,7 @@ MUSSTA:	mtps	#600			; stop interrupts
 	tst	@#177714
 	tst	@#177714
 	mov	#MusIntLo, @#304	; set music interrupt
-	bis	#^B01000001, @#177710	; allow int, start, timer = 2mks, 500000 ticks per second
+	bis	#^B01000011, @#177710	; allow int, start, timer = 4mks
 99$:	mtps	#0
 	return
 
@@ -967,7 +968,7 @@ MUS001:
 SND_TONE = 1
 SND_PAUSE = 2
 
-SND_PAUSE_TIMER	= 100*256
+SND_PAUSE_TIMER	= 50*256
 
 ; TYPE: SND_TONE
 ; ARGS: TCNT  = total repeats count (use additions every cycle)
@@ -978,29 +979,40 @@ SND_PAUSE_TIMER	= 100*256
 ;	Hi = high signal length
 ;       Dh = addition to Hi
 ; jump
-SND001:	.word	SND_TONE, 20, 01*256, 0, 250*256, -9*256,  250*256, -9*256
+SND001:	.word	SND_TONE, 20, 01*256, 0, 125*256, -5*256,  125*256, -5*256
 	.word	0
 ; spadeing
-SND002:	.word	SND_TONE, 05, 01*256, 0, 20*256, +02*256,  200*256, -30*256
+SND002:	.word	SND_TONE, 05, 01*256, 0, 10*256, +01*256,  100*256, -15*256
 	.word	0
 ; add item
-SND003:	.word	SND_TONE, 04, 25*256, -4*256, 80*256, 40*256, 70*256, 40*256
+SND003:	.word	SND_TONE, 04, 25*256, -4*256, 40*256, 20*256, 35*256, 20*256
 	.word	0
 ; eat item
-SND004:	.word	SND_TONE, 06, 10*256, -1*256, 100*256, 20*256, 10*256, 40*256
-	.word	SND_TONE, 04, 2*256, 2*256, 240*256, -20*256, 240*256, -40*256
+SND004:	.word	SND_TONE, 06, 10*256, -1*256, 50*256, 10*256, 25*256, 20*256
+	.word	SND_TONE, 04, 2*256, 2*256, 120*256, -10*256, 120*256, -20*256
 	.word	0
 ; remove item
-SND005:	.word	SND_TONE, 04, 9*256, +4*256, 250*256, -40*256, 230*256, -35*256
+SND005:	.word	SND_TONE, 04, 8*256, +2*256, 124*256, -20*256, 114*256, -18*256
 	.word	0
 ; message box
-SND006:	.word	SND_TONE, 1, 15*256, 0, 30000, 0, 30000, 0
+SND006:	.word	SND_TONE, 1, 8*256, 0, 15000, 0, 15000, 0
 	.word	SND_PAUSE, 8
-	.word	SND_TONE, 1, 10*256, 0, 30000, 0, 30000, 0
+	.word	SND_TONE, 1, 12*256, 0, 15000, 0, 15000, 0
+	.word	0
+; test
+SND007:	.word	SND_TONE, 1, 6*256,  0, 156*256,  0, 156*256, 0
+	.word	SND_TONE, 1, 9*256,  0, 104*256,  0, 104*256, 0
+	.word	SND_TONE, 1, 12*256, 0, 78*256,   0, 78*256, 0
+	.word	SND_TONE, 1, 6*256,  0, 62*256,  0, 250*256, 0
+	.word	SND_TONE, 1, 9*256,  0, 28*256,  0, 180*256, 0
+	.word	SND_TONE, 1, 12*256, 0, 26*256,  0, 130*256, 0
 	.word	0
 
 .radix 8
 
+; 8mks for one period = 16mks for two = 1 / 0.000016 = 62500Hz
+; TONE: 1, 2000, 400, 0, 128, 0 - Frames, Frame Len, Pitch, Pitch slide, Duty, Duty slide
+; My Pitch = 62500 / Pitch
 
 ; // SPRITES ////////////////////////////////////////////////////////////////////
 

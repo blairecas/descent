@@ -93,6 +93,7 @@ MainReset:
 	movb	#1., TestSoundNum
 	clr	KeyCombo		; 'combo' key must be cleared
 	clrb	EpisodeDream		; must be cleared to draw full-colored sprites
+	clrb	PlayerFlashing		; also must not flash in menu
 	; screen prepare (clear)
 	mov	#VADDR, R0		; reset lines table addrs (if stopped in a middle of changing)
 	.ppexe	#CmdLinesFromR0	
@@ -282,6 +283,7 @@ MainEpisodePrepare:
 	clr	playerAni
 	clr	playerItemNew
 	mov	playerLifeMax, playerLife
+	clrb	playerFlashing		; no flashing at episode start
 	; init level field (global->local)
 	movb	#-1, glevelX			; -1 = not initialized
 	movb	EListGlevX(R0), glevelNewX	; new global level coords
@@ -439,10 +441,23 @@ BufAllSprites:
 	mov	plActing, R0
 	asl	R0
 	call	@BufActTable(R0)
-	; buffer player 
+	; buffer player
+	movb	EpisodeDream, R0	; save 'dream' state
+	mov	R0, -(SP)
+	bne	10$			; no flashing at dream episodes
+	movb	playerFlashing, R0	; set 'dream' as flashing bit
+	bic	#^B1111111111111011, R0
+	movb	R0, EpisodeDream
+10$:	; buffer it
 	mov	#playerObject, R0
 	call	BufferObject
-	return
+	mov	(SP)+, R0
+	movb	R0, EpisodeDream
+	; process player flashing after drawing
+	tstb	playerFlashing
+	ble	20$
+	decb	playerFlashing
+20$:	return
 
 
 ; buffer currently using item
@@ -949,6 +964,7 @@ CheckAvail:
 	sec
 	return
 
+
 ; set checked blocks from level point R1,R2 (x,y), return type and flag of passable (Z - not passable)
 ; 0 - nothing, 1 - can climb, 2 - can stand, 3 - solid
 CheckAvailPoint:
@@ -965,6 +981,20 @@ CheckAvailPoint:
 	bic	#^B1111111111111100, R0	; 2-bits for tile weight
 	incb	ChkBlocksEmpty(R0)
 	cmp	R0, #3
+	return
+
+
+; get tile at pixel position R1, R2 (x,y)
+; returns: R0 - tile word
+GetTileAt:
+	mov	R1, R3
+	mov	R2, R4
+	; coords to level addr
+	bic	#^B1111, R4		; R4 = levelY*16
+	ash	#-4, R3			; R3 = levelX
+	add	R3, R4			; level offset in units
+	asl	R4			; level offset in words
+	mov	Level(R4), R0
 	return
 
 
@@ -1401,6 +1431,34 @@ ProcessPlayer:
 	mov	playerState, R0
 	asl	R0
 	call	@PStateTable(R0)
+	; check for dangerous tile below player (not every frame)
+	bit	#1, FrameCount
+	beq	30$
+	mov	playerX, R1
+	mov	playerY, R2
+	add	#6., R2
+	add	#3., R1
+	call	GetTileAt
+	bit	#^B0001000000000000, R0		; hazardous bit
+	bne	20$
+	add	#9., R1
+	call	GetTileAt
+	bit	#^B0001000000000000, R0		; hazardous bit
+	bne	20$
+	br	30$
+20$:	mov	#16., R0
+	call	DecreaseLife
+30$:	;
+	return
+
+
+; decrease player life by R0 value
+; set player flashing bit, set sound?
+DecreaseLife:
+	sub	R0, playerLife
+	bge	10$
+	clr	playerLife
+10$:	movb	#16., playerFlashing
 	return
 
 
@@ -2296,10 +2354,9 @@ EnemyIntersect:
 	bcc	99$
 	; have intersection, decrease life
 	movb	EnemiesAttack(R4), R0
-	sub	R0, playerLife
-	bge	99$
-	clr	playerLife
+	call	DecreaseLife
 99$:	return
+
 
 ; check coordinates X intersect, adjust with some pixels at sides
 ; R1 = [R1+2..R1+13], R2 = [R2+3..R2+12]
@@ -2316,6 +2373,7 @@ CheckIntersectX:
 	return
 90$:	clc
 	return
+
 
 ; check coordinated Y intersect, adjust enemy Y with R0
 CheckIntersectY:
@@ -2576,6 +2634,7 @@ MessageNosound:	.byte	0	; <>0 - next message will be without default sound
 TestSoundNum:	.byte	1	; sound test number
 EpisodeDream:	.byte	0	; game episode is in dream mode (sprite colors will be only plane 0)
 ItemsWereBkp:	.byte	0	; <>0 - items were backed up (for 'dream' episode)
+PlayerFlashing:	.byte	0	; <>0 - player are flashing blue (taking damage)
 
 glevelX:	.byte	0
 glevelY:	.byte	0

@@ -114,7 +114,7 @@ SND_EAT		= 4
 SND_REMOVEITEM	= 5
 SND_MSGBOX	= 6
 
-SND_MAX		= 6
+SND_MAX		= 7
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Text strings IDs
