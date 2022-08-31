@@ -995,9 +995,9 @@ SND004:	.word	SND_TONE, 06, 10*256, -1*256, 50*256, 10*256, 25*256, 20*256
 SND005:	.word	SND_TONE, 04, 8*256, +2*256, 124*256, -20*256, 114*256, -18*256
 	.word	0
 ; message box
-SND006:	.word	SND_TONE, 1, 8*256, 0, 15000, 0, 15000, 0
-	.word	SND_PAUSE, 8
-	.word	SND_TONE, 1, 12*256, 0, 15000, 0, 15000, 0
+SND006:	.word	SND_TONE, 1, 10*256, 0, 15000, 0, 15000, 0
+	.word	SND_PAUSE, 10
+	.word	SND_TONE, 1, 16*256, 0, 15000, 0, 15000, 0
 	.word	0
 ; test
 SND007:	.word	SND_TONE, 1, 6*256,  0, 156*256,  0, 156*256, 0
@@ -1020,7 +1020,7 @@ SND007:	.word	SND_TONE, 1, 6*256,  0, 156*256,  0, 156*256, 0
 
 TxtTable:	.word	TXT_Menu00, TXT_Menu01, TXT_Menu02, TXT_Menu03, TXT_Menu04, TXT_MENU05, TXT_Menu06, TXT_Menu07, TXT_Menu08, TXT_Pre_Intro
 		.word	TXT_Game_Over, TXT_Msg1, TXT_Msg2, TXT_Msg3, TXT_Ep0End, TXT_Ep1Msg, TXT_Ep2Msg, TXT_Ep3Msg, TXT_Yana01, TXT_CantLight
-		.word	TXT_Desc_Light, TXT_Desc_Spade, TXT_Desc_Cherry
+		.word	TXT_Desc_Light, TXT_Desc_Spade, TXT_Desc_Cherry, TXT_Desc_Key
 
 
 TxtDebug01:	.asciz	<1>" Свободно ЦП:"<2>"00000"<1>", ПП:"<2>"00000"<1>", эмуляция"
@@ -1071,5 +1071,6 @@ TXT_CantLight:	.asciz	<2>"А здесь всё освещено"
 TXT_Desc_Light:		.asciz	<2>"Фонарик немного освещает вокруг"<12><2>"При использовании осветит всё, но"<12><7>"лишь один раз"
 TXT_Desc_Spade:		.asciz	<2>"Добротная лопата"<12><2>"Копает "<7>"и прочее.."
 TXT_Desc_Cherry:	.asciz	<2>"Немного восстановит"<12><2>"моё здоровье"
+TXT_Desc_Key:	.asciz	<2>"Если есть ключ,"<12><2>"то должна быть и дверь"
 
 ENDVram0:

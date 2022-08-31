@@ -1532,11 +1532,11 @@ Acting:
 99$:	return
 
 
-ActingStartTable:
-	.word	AcStartNone, AcStartLight, AcStartSpade, AcStartHealth, AcStartNone
+ActingStartTable:   ; none       light         spade         health 1       ore          key
+	.word	AcStartNone, AcStartLight, AcStartSpade, AcStartHealth, AcStartNone, AcStartNone
 ActingTable:
-	.word	RetFunc, RetFunc, ActingSpade, RetFunc, RetFunc
-
+	.word	RetFunc, RetFunc, ActingSpade, RetFunc, RetFunc, RetFunc
+	; btw, RetFunc = 0 (there is RET code at @#000000)
 
 ; nothing to do - clear plActing variable
 AcStartNone:
@@ -2127,9 +2127,20 @@ ProcObjItem:
 120$:	clc
 	return
 
+
 ; friendly object
 ProcObjFriend:
+	cmp	R2, #TSUB_YANA1		; TODO: proc by table
+	beq	10$
 	return
+10$:	; Yana1 - just turn her to the player direction
+	; 32 ->  <- 35
+	mov	#32., 2(R0)		; sprite #
+	cmp	4(R0), playerX
+	blo	20$
+	mov	#35., 2(R0)
+20$:	return
+
 
 ; trigger object, R0=addr of object, R1=TOBJ_TRIG, R2=trigger subtype
 ProcObjTrig:
@@ -2717,8 +2728,8 @@ PlayerObjectEnd:
 Items:		.word	0, 0, 0, 0, 0, 0, 0, 0
 ItemsBackup:	.word	0, 0, 0, 0, 0, 0, 0, 0	; 'dream' episodes are without items
 
-		;	0    1    2    3    4
-ItemBaseSpr:	.byte	00., 10., 11., 12., 13.
+		;	0    1    2    3    4    5
+ItemBaseSpr:	.byte	00., 10., 11., 12., 13., 14.
 		.even
 
 hitpointX:	.word	0		; hitting something at this point
@@ -2807,8 +2818,7 @@ END:
 ; First-time taken items's message IDs
 ItemMessage:
 	.byte	0, TXTID_DESC_LIGHT, TXTID_DESC_SPADE, TXTID_DESC_CHERRY, 
-	.byte	0 ; no description for ore
-	.byte	0, 0, 0
+	.byte	0, TXTID_DESC_KEY, 0, 0
 	.byte	0, 0, 0, 0, 0, 0, 0, 0
 	.byte	0, 0, 0, 0, 0, 0, 0, 0
 	.byte	0, 0, 0, 0, 0, 0, 0, 0

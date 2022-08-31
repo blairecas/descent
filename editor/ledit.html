@@ -263,12 +263,13 @@ function CopyToText ()
 	st = st + "\t.byte\t";
 	arr = [];
 	for (let j=0; j<k; j++) {
-	    arr.push(GlobalObj[i][j][0]);
-	    arr.push(GlobalObj[i][j][1]);
-	    arr.push(GlobalObj[i][j][2]);
-	    arr.push(GlobalObj[i][j][3]);
+	    st = st + GlobalObj[i][j][0] + ",";
+	    st = st + GlobalObj[i][j][1] + ",";
+	    st = st + GlobalObj[i][j][2] + ",";
+	    st = st + GlobalObj[i][j][3];
+	    if (j < (k-1)) st = st + ", ";
 	}
-	st = st + arr.join(",") + "\n";
+	st = st + "\n";
     }
     st = st + "\t.even\n\n.radix 8\n";
     // 

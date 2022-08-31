@@ -80,8 +80,9 @@ TOBJ_ENEMY	= 2
 TOBJ_TRIG	= 3
 
 ; (!) change tables in obj processing if changing here (!)
-TSUB_BOSS	= 0
-TSUB_SPIDER1	= 0
+TSUB_BOSS	= 0		; TOBJ_FRIEND
+TSUB_YANA1	= 1
+TSUB_SPIDER1	= 0		; TOBJ_ENEMY
 TSUB_SPIDER2	= 1
 
 ; (!) change table in item processing if changing here (!) (and in item messages table)
@@ -89,6 +90,7 @@ ITEM_LIGHT	= 1
 ITEM_SPADE	= 2
 ITEM_CHERRY	= 3
 ITEM_ORE	= 4
+ITEM_KEY	= 5
 
 ; trigger subtypes
 TRIG_APPR	= 1		; approach trigger, arg0 = event #, arg1 = approach max distance by x or y
@@ -135,6 +137,7 @@ TXTID_CANTLIGHT = 19.
 TXTID_DESC_LIGHT  = 20.
 TXTID_DESC_SPADE  = 21.
 TXTID_DESC_CHERRY = 22.
+TXTID_DESC_KEY	= 23.
 
 ; //////////////////////////////////////////////////////////////////////////////	
 ; // CPU<->PPU exchange variables
