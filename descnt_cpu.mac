@@ -259,12 +259,10 @@ MainEpisodePrepare:
 	cmp	Episode, #2
 	bne	20$
 	; episode 2 - change boss to flashlight, remove light message, open door
-	mov	#ChgObjE0201, R5	; replace boss to flashlight
-	call	ChangeGlobalObject
-	mov	#ChgObjE0202, R5	; remove light message
-	call	ChangeGlobalObject
+	mov	#ChgObjE0201, R5	; replace boss to flashlight, remove 'need light' message
+	call	ChangeGlobalObjects
 	mov	#ChgTileE0201, R5	; open door
-	call	ChangeGlobalTile
+	call	ChangeGlobalTiles
 20$:	; episode items
 	call	RestoreItems		; restore items if they were backed up
 	; episode variables
@@ -890,8 +888,9 @@ InitLevelField:
 
 ; make changes in global objects (for episode transitions)
 ; R5 - change object sequence (glx, gly, objnum, [type|subtype], arg#0, arg#1, coords)
-ChangeGlobalObject:
+ChangeGlobalObjects:
 	movb	(R5)+, glevelX
+	bmi	99$
 	movb	(R5)+, glevelY
 	call	PrepareCopyObjects	; -> R1 - GlobalObj for level 0,0 (relative)
 	movb	(R5)+, R0		; objnum -> R0 (not need to clear high-byte)
@@ -907,14 +906,17 @@ ChangeGlobalObject:
 	call	PutB12
 	movb	(R5)+, R1		; coords
 	call	PutB12
-	return
+	br	ChangeGlobalObjects
+99$:	return
 
 
 ; make change in global tile field
-; R5 - change tile sequence (global offset, new tile #)
-ChangeGlobalTile:
+; R5 - change tile sequence (global offset, new tile # ... ... 0)
+ChangeGlobalTiles:
 	mov	(R5)+, R0		; R0 = global offset
+	bmi	99$
 	mov	(R5)+, R1		; R1 = new tile #
+	mov	R5, -(SP)		; save pointer
 	call	SetVreg			; 
 	mov	#GlobalLevel-200000, R2	; get global level addr
 	sec				;
@@ -927,7 +929,9 @@ ChangeGlobalTile:
 	bis	R0, R1			; R1 = new tile # with weight
 	bic	#^B0001111111111111, (R5)	; keep darken and current draw states
 	bis	R1, (R5)
-	return
+	mov	(SP)+, R5
+	br	ChangeGlobalTiles
+99$:	return
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -1448,8 +1452,39 @@ ProcessPlayer:
 	br	30$
 20$:	mov	#16., R0
 	call	DecreaseLife
-30$:	;
+30$:	; check for closed door in front of player direction
+	tstb	HaveKeys			; no keys? do not bother checking for door then
+	beq	40$
+	mov	playerX, R1			; TODO: we don't need to update R1, R2 i think
+	mov	playerY, R2
+	add	#8., R2
+	cmp	playerDir, #PLDRIGHT
+	bne	35$
+	add	#14., R1
+	call	CheckAndOpenDoor
+	br	40$
+35$:	cmp	playerDir, #PLDLEFT
+	bne	40$
+	add	#2., R1
+	call	CheckAndOpenDoor
+40$:	;
 	return
+
+
+; checks and opens door at point (x,y) (R1, R2)
+CheckAndOpenDoor:
+	call	GetTileAt			; returns also R4 = level offset
+	cmpb	R0, #60.			; TODO: change to smth like TILE_DOOR
+	bne	90$
+	inc	R0				; 'open' door
+	bic	#^B0000001100000000, R0		; clear 'unpassable' flag
+	mov	R0, Level(R4)
+	mov	#SND_OPENDOOR, R0
+	.ppexe	#CmdSoundPlay
+	mov	#ITEM_KEY, R1
+	call	RemoveOneItem
+	call	UpdateItems
+90$:	return
 
 
 ; decrease player life by R0 value
@@ -1858,7 +1893,7 @@ AddItem:
 	return
 
 
-; find and remove item, R1 - item ID
+; find and remove item (ALL), R1 - item ID
 ; returns removed items count -> R0
 RemoveItem:
 	mov	#Items, R2
@@ -1877,9 +1912,27 @@ RemoveItem:
 	return
 
 
+; find and remove ONE item, R1 - item ID
+RemoveOneItem:
+	mov	#Items, R2
+	mov	#8., R3
+10$:	cmpb	(R2)+, R1		; find item by ID
+	beq	20$
+	inc	R2
+	sob	R3, 10$
+	return
+20$:	decb	(R2)			; decrease item count
+	beq	30$
+	return
+30$:	dec	R2			; no more item - clear it's ID also
+	clr	(R2)
+	return
+
+
 ; clears items presence vars
 ClearItemPresence:
 	clrb	LightType		; no flashlight by default
+	clrb	HaveKeys		; no keys 
 	return
 
 
@@ -1887,8 +1940,11 @@ ClearItemPresence:
 ; R5 - item #
 SetItemPresence:
 	cmp	R5, #ITEM_LIGHT
-	bne	90$
+	bne	10$
 	incb	LightType		; flashlight is present, incb is safe here
+10$:	cmp	R5, #ITEM_KEY
+	bne	90$
+	incb	HaveKeys
 90$:	return
 
 
@@ -2493,7 +2549,7 @@ Episode0EndCheck:
 20$:	tst	EpisodeVar1		; was message shown just recently?
 	beq	30$
 	mov	#TOBJ_FRIEND*256.+TSUB_BOSS, R1
-	mov	#12., R5
+	mov	#TXTID_MSG3, R5
 	call	EventShowMessage
 	clr	EpisodeVar1
 30$:	clc
@@ -2652,7 +2708,8 @@ glevelY:	.byte	0
 glevelNewX:	.byte	0
 glevelNewY:	.byte	0
 
-LightType:	.byte	0	; !=0 = flashlight is present in inventory
+LightType:	.byte	0	; <>0 = flashlight is present in inventory
+HaveKeys:	.byte	0	; <>0 - player have key(s)
 		.even
 ; ------------------------------------------------------------------------------
 
@@ -2671,11 +2728,13 @@ EListGlevY:	.byte	0., 15., 0., 1.
 		.byte	TXTID_GAMEOVER
 EListMsg:	.byte	TXTID_EP0MSG, TXTID_EP1MSG, TXTID_EP2MSG, TXTID_EP3MSG
 ; episode object changes - 02 episode (glx,gly,objnum, [type|subtype],arg#0,arg#1,coords)
-ChgObjE0201:	.byte	0,0, 0, TOBJ_ITEM*32+ITEM_LIGHT, 10., 0, 3*16.+8.
-ChgObjE0202:	.byte	2,0, 0, 0,0,0,0
+ChgObjE0201:	.byte	0,0, 0, TOBJ_ITEM*32+ITEM_LIGHT, 10., 0, 3*16.+8.	; replace boss with flashlight
+		.byte	2,0, 0, 0,0,0,0						; remove 'need light' message
+		.byte	-1
 		.even
 ; tile changing (global offset, new tile #)
-ChgTileE0201:	.word	580., 61.
+ChgTileE0201:	.word	580., TILE_DOOR+1
+		.word	-1
 
 
 ; player states
