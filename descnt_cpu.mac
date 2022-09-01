@@ -2475,7 +2475,7 @@ ProcessDelayedMsg:
 ; decrease boulder count and check for episode 0 end
 ; returns C - flag - episode complete
 Episode0EndCheck:
-	mov	#4, R1
+	mov	#ITEM_ORE, R1
 	call	RemoveItem		; returns removed count in R0 (and set flags)
 	beq	20$			; R0=0? (nothing was removed)
 	add	R0, EpisodeVar0
@@ -2766,7 +2766,7 @@ EnemiesAttack:	.byte	8.		; spider 1
 		;	0   1   2   3   4   5   6   7   8   9
 TilesWeight:	.byte	0,  0,  0,  0,  0,  0,  0,  0,  0,  0	; 0
 		.byte	7,  7,  7,  7,  0,  0,  0,  0,  0,  0	; 10
-		.byte	3,  0,  0,  0,  0,  3,  3,  3,  3,  0	; 20
+		.byte	3,  3,  3,  3,  0,  3,  3,  3,  3,  0	; 20
 		.byte	0,  0,  0,  0,  0,  0,  2,  0,  1,  1	; 30
 		.byte	0,  0,  0,  0,  0,  0,  0,  0,  0,  0	; 40
 		.byte	0,  0,  0,  0,  0,  0,  0,  0,  0,  0	; 50
