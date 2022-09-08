@@ -59,12 +59,12 @@ START:	.print	#MSG000			; helloworld!!111one
 	mov	#100000, PPCOMM		; ask PPU to exit and cleanup
 	tst	PPCOMM
 	bne	.-4			; TODO: check timer to not wait forever
-	mtps	0
+	mtps	#0
 	call	PPRELE			; release PPU memory
 	.print	MSGADR			; print error (must be set in READFL)
 	.exit
 10$:	; prepare
-	mtps	#200			; stop some interrupts (but not halt)
+	mtps	#200			; do we need to stop interrupts?
 	mov	#MSGCLS, MSGADR
 	.print	MSGADR			; clear screen with ESC-codes		
 
@@ -708,10 +708,12 @@ PPPG10:	mov	#BUF002/2, R0		; source addr in CPU
 ; //////////////////////////////////////////////////////////////////////////////
 
 PPUST2:
-	call	@#7132			; stop FD motor
+	clr	R0
+	call	@7132(R0)		; stop FD motor
 
-	; set PSW (HP**TNZVC) = 110000000 (HP=11, disable interrupts, halt mode)
-	mtps	#600
+	; set PSW (HP**TNZVC) = 110000000 (P - disable interrupts, H - halt mode)
+	mtps	#200
+
 	; 11 110 001 (all RAM banks of plane 0)
         ; WARNING !!! We can't read (and bit/tst so on..) from there, but CAN write
 	; to get ROM banks back - mov #1, @#177054

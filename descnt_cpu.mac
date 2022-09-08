@@ -16,7 +16,7 @@
 @include inc_common.mac
 @include inc_cpu_header.mac
 
-	mtps	#200			; PSW - HP**TNZVC (010000000)
+	mtps	#600			; PSW - HP**TNZVC (010000000)
 	mov	#1000, SP		; stack is 500..776(8)
 
 	; disable serial adapters interrupts
@@ -2283,27 +2283,15 @@ ProcObjEnemy:
 	return
 
 EnemySubProcTable:
-	.word	ProcSpider1, ProcSpider2
+	.word	ProcSpider1, ProcSpider2, ProcBat1
 
-; === generic spider 1 ===
-; try to move in direction of face (forward)
-; if unable to move - turn around 
-; try to fall down (have weight=2, normal falling)
-; repeat
-; R5 = obj struct addr
+; Enemy - Spider 1 
+; R5 = obj struct addr, sprites are 24., 25. -> and 26., 27 <-
+; try to move in direction of face (forward), try to fall down (have weight=2, normal falling)
 ProcSpider1:
-	; set sprite 
-	mov	2(R5), R0			; arg#1 | spr#
-	clr	R3
-	rol	R0				; get direction bit in C
-	rol	R3				; set direction bit
-	asl	R3
-	add	#24., R3			; get base sprite #
-	mov	FrameCount, R4			; add animation
-	bic	#^B1111111111111101, R4
-	asr	R4
-	bis	R4, R3
-	movb	R3, 2(R5)
+	; set sprite animation every for every 2 frames
+	bic	#1, 2(R5)
+	bis	FrameBit1, 2(R5)
 	; Y-movement (falling)
 	mov	6(R5), R2			; R2 = Y
 	cmp	R2, #FieldDY*16.-16.		; test for out of screen
@@ -2313,10 +2301,10 @@ ProcSpider1:
 	call	CheckAvail			; check for avail down
 	bcs	10$				; 
 	add	#4, 6(R5)			; Y=Y+4
-10$:	mov	4(R5), R1
+10$:	; X-movement
+	mov	4(R5), R1
 	mov	6(R5), R2
-	; X-movement
-	bit	#^B1000000000000000, 2(R5)	; check moving direction
+	bit	#^B0000000000000010, 2(R5)	; check moving direction
 	bne	50$
 	; move right
 	cmp	R1, #FieldDX-2*16.+4		; right screen boundary -12px (to not bite player at the edge)
@@ -2324,10 +2312,10 @@ ProcSpider1:
 	inc	R1
 	inc	R1	
 	call	CheckAvail
-	bcc	20$
-18$:	bis	#^B1000000000000000, 2(R5)	; change direction to 'left'
+	bcs	18$
+	add	#2, 4(R5)
 	return
-20$:	add	#2, 4(R5)
+18$:	bis	#^B0000000000000010, 2(R5)	; change direction to 'left'
 	return
 50$:	; move left
 	cmp	R1, #12.			; left screen boundary +12px (spider can't stay on leftmost tile)
@@ -2335,32 +2323,26 @@ ProcSpider1:
 	dec	R1
 	dec	R1
 	call	CheckAvail
-	bcc	60$
-58$:	bic	#^B1000000000000000, 2(R5)
+	bcs	58$
+	sub	#2, 4(R5)
 	return
-60$:	sub	#2, 4(R5)
+58$:	bic	#^B0000000000000010, 2(R5)
 	return
 
 
 ; spider 2 - try to move up/down
-; R5 = obj struct addr
+; R5 = obj struct addr, arg#1 - bit 7 (0) - move down
 ProcSpider2:
 	; set sprite 
-	; mov	2(R5), R0			; arg#1 | spr#
-	movb	#28., 2(R5)
-	bit	#4, FrameCount			; by 4-frames
-	bne	10$
-	movb	#29., 2(R5)
-10$:	; X, Y coords
+	movb	#28., 2(R5)			; 2(R5) = arg#1 | spr#
+	add	FrameBit2, 2(R5)
+	; X, Y coords
 	mov	4(R5), R1
 	mov	6(R5), R2
 	; Y-movement
 	; are we going down? (upper bit of arg#1)
 	bit	#^B1000000000000000, 2(R5)	; check moving direction
 	bne	50$
-	; check bottom screen boundary
-;	cmp	R2, #FieldDY*16.-16.
-;	bge	20$
 	inc	R2				; increase Y and check avail
 	inc	R2
 	call	CheckAvail
@@ -2369,10 +2351,7 @@ ProcSpider2:
 	br	70$
 20$:	bis	#^B1000000000000000, 2(R5)	; change direction to 'up'
 	br	70$
-50$:	; check upper screen boundary
-;	cmp	R2, #2.
-;	ble	60$
-	dec	R2
+50$:	dec	R2
 	dec	R2
 	call	CheckAvail
 	bcs	60$
@@ -2401,6 +2380,64 @@ ProcSpider2:
 	sub	#70., R0
 	mov	R0, Level+32.(R4)
 74$:	;
+	return
+
+
+; The Bat enemy, sprites 44.,45. ->  and 46.,47. <-
+; arg #1 - bit 7 - move up(0)/down
+; R5 = obj struct addr
+ProcBat1:
+	; set sprite animation every for every 4 frames
+	bic	#1, 2(R5)
+	bis	FrameBit2, 2(R5)
+	; Y-movement
+	mov	4(R5), R1
+	mov	6(R5), R2
+	bit	#^B1000000000000000, 2(R5)
+	bne	20$
+	; move up
+	cmp	R2, #16.
+	ble	18$
+	sub	#3., R2
+	call	CheckAvail
+	bcs	18$
+	sub	#3, 6(R5)
+	br	50$
+18$:	bis	#^B1000000000000000, 2(R5)	; set 'move down' flag
+	br	50$
+20$:	; move down
+	cmp	R2, #FieldDY*16.-16.
+	bge	28$
+	add	#3., R2
+	call	CheckAvail
+	bcs	28$
+	add	#3, 6(R5)
+	br	50$
+28$:	bic	#^B1000000000000000, 2(R5)
+50$:	; X-movement
+	mov	4(R5), R1
+	mov	6(R5), R2
+	bit	#^B0000000000000010, 2(R5)	; check moving direction by sprite #
+	bne	60$
+	; move right
+	cmp	R1, #FieldDX-2*16.+4		; right screen boundary -12px (to not bite player at the edge)
+	bge	58$
+	add	#3., R1
+	call	CheckAvail
+	bcs	58$
+	add	#3, 4(R5)
+	return
+58$:	bis	#^B0000000000000010, 2(R5)	; change direction to 'left'
+	return
+60$:	; move left
+	cmp	R1, #12.			; left screen boundary +12px (spider can't stay on leftmost tile)
+	ble	68$
+	sub	#3., R1
+	call	CheckAvail
+	bcs	68$
+	sub	#3, 4(R5)
+	return
+68$:	bic	#^B0000000000000010, 2(R5)
 	return
 
 
@@ -2598,15 +2635,26 @@ PutA12:	.word	0			; vram addr rel to 200000
 
 ; vsync wait cycle
 VSyncWait:
-	inc	CpuWaitCount0		; empty cycles counter
+	clr	R0
+VSyncWait1:
+	inc	R0			; empty cycles counter
 	cmp	VSyncCount1, (PC)+	; check for X vsync
-VSyncX:	.WORD	2
-	blo	VSyncWait
+VSyncX:	.word	2			; 1 = 50Hz, 2 = 25Hz
+	blo	VSyncWait1
 	clr	VSyncCount1
-	inc	FrameCount
-	mov	CpuWaitCount0, CpuWaitCount
-	clr	CpuWaitCount0
+	mov	R0, CpuWaitCount
 	.ppexe	#CmdFixWait		; get PPU empty (wait) cycles
+	inc	FrameCount
+	mov	FrameCount, R0
+	clr	R1			; set variables for animations
+	ror	R0
+	ror	R0
+	rol	R1
+	mov	R1, FrameBit1
+	clr	R1
+	ror	R0
+	rol	R1
+	mov	R1, FrameBit2
 	return
 
 ; debug info
@@ -2681,11 +2729,12 @@ VSync:	inc	VSyncCount1		; this one is used in CPU
 ; // DATA 
 ; //////////////////////////////////////////////////////////////////////////////
 
-; TODO: move vars to [0..500] unused interrupts vectors
+; TODO: move vars to [0..500] unused interrupts vectors?
 
-CpuWaitCount0:	.word	0	; to measure wait time
 CpuWaitCount:	.word	0	; CPU empty cycles counter
 FrameCount:	.word	0	; 'frame' counter
+FrameBit1:	.word	0	; 0|1 bit #1 of frame counter (for animations)
+FrameBit2:	.word	0	; 0|1 bit #2 of frame counter (for animations)
 
 CurrentMode:	.word	0	; game mode (0-reset, 1-menu.. etc)
 Episode:	.word	0	; game episode number
@@ -2718,12 +2767,12 @@ DelayedMessage:	.word	0	; message # to show after delay a bit
 
 ; Episode init consts
 EListDream:	.byte	0,  1,  0,  0
-EListPlayerX:	.byte	200., 128., 200., 15.*16.
-EListPlayerY:	.byte	48., 64., 48., 8.*16.
-EListPlayerDir:	.byte	1, 1, 1, 1
+EListPlayerX:	.byte	200., 128., 200., 0.*16.
+EListPlayerY:	.byte	48., 64., 48., 2.*16.
+EListPlayerDir:	.byte	1, 1, 1, 0
 EListPlayerSpr:	.byte	5., 5., 5., 5.
-EListGlevX:	.byte	0., 0., 0., 1.
-EListGlevY:	.byte	0., 15., 0., 1.
+EListGlevX:	.byte	0., 0., 0., 3.
+EListGlevY:	.byte	0., 15., 0., 2.
 		; need this for index = -1
 		.byte	TXTID_GAMEOVER
 EListMsg:	.byte	TXTID_EP0MSG, TXTID_EP1MSG, TXTID_EP2MSG, TXTID_EP3MSG
@@ -2807,10 +2856,12 @@ varAddr3:	.word	0
 ; enemies heighs-1 in pixels from bottom
 EnemiesHeight:	.byte	8.		; spider 1
 		.byte	16.		; spider 2
+		.byte	12.		; bat 1
 		.even
 ; enemies attack power
 EnemiesAttack:	.byte	8.		; spider 1
 		.byte	4.		; spider 2
+		.byte	8.		; bat 1
 		.even
 
 

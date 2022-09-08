@@ -84,6 +84,7 @@ TSUB_BOSS	= 0		; TOBJ_FRIEND
 TSUB_YANA1	= 1
 TSUB_SPIDER1	= 0		; TOBJ_ENEMY
 TSUB_SPIDER2	= 1
+TSUB_BAT1	= 2
 
 ; (!) change table in item processing if changing here (!) (and in item messages table)
 ITEM_LIGHT	= 1
