@@ -2767,12 +2767,12 @@ DelayedMessage:	.word	0	; message # to show after delay a bit
 
 ; Episode init consts
 EListDream:	.byte	0,  1,  0,  0
-EListPlayerX:	.byte	200., 128., 200., 0.*16.
-EListPlayerY:	.byte	48., 64., 48., 2.*16.
+EListPlayerX:	.byte	200., 128., 200., 14.*16.
+EListPlayerY:	.byte	48., 64., 48., 8.*16.
 EListPlayerDir:	.byte	1, 1, 1, 0
 EListPlayerSpr:	.byte	5., 5., 5., 5.
-EListGlevX:	.byte	0., 0., 0., 3.
-EListGlevY:	.byte	0., 15., 0., 2.
+EListGlevX:	.byte	0., 0., 0., 0.
+EListGlevY:	.byte	0., 15., 0., 1.
 		; need this for index = -1
 		.byte	TXTID_GAMEOVER
 EListMsg:	.byte	TXTID_EP0MSG, TXTID_EP1MSG, TXTID_EP2MSG, TXTID_EP3MSG
@@ -2875,10 +2875,10 @@ EnemiesAttack:	.byte	8.		; spider 1
 .radix 10
 		;	0   1   2   3   4   5   6   7   8   9
 TilesWeight:	.byte	0,  0,  0,  0,  0,  0,  0,  0,  0,  0	; 0
-		.byte	7,  7,  7,  7,  0,  0,  0,  0,  0,  0	; 10
-		.byte	3,  3,  3,  3,  0,  3,  3,  3,  3,  0	; 20
+		.byte	7,  7,  7,  7,  0,  0,  0,  0,  0,  3	; 10
+		.byte	3,  3,  3,  3,  0,  3,  3,  3,  3,  3	; 20
 		.byte	0,  0,  0,  0,  0,  0,  2,  0,  1,  1	; 30
-		.byte	0,  0,  0,  0,  0,  0,  0,  0,  0,  0	; 40
+		.byte	0,  0,  0,  0,  0,  0,  2,  0,  0,  0	; 40
 		.byte	0,  0,  0,  0,  0,  0,  0,  0,  0,  0	; 50
 		.byte	3,  0,  0,  2, 24,  0,  0,  0,  0,  0	; 60
 		.byte	0,  0,  0,  0,  0,  0,  0,  0,  0,  0	; 70
