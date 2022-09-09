@@ -1021,7 +1021,7 @@ SND007:	.word	SND_TONE, 1, 6*256,  0, 156*256,  0, 156*256, 0
 
 TxtTable:	.word	TXT_Menu00, TXT_Menu01, TXT_Menu02, TXT_Menu03, TXT_Menu04, TXT_MENU05, TXT_Menu06, TXT_Menu07, TXT_Menu08, TXT_Pre_Intro
 		.word	TXT_Game_Over, TXT_Msg1, TXT_Msg2, TXT_Msg3, TXT_Ep0End, TXT_Ep1Msg, TXT_Ep2Msg, TXT_Ep3Msg, TXT_Yana01, TXT_CantLight
-		.word	TXT_Desc_Light, TXT_Desc_Spade, TXT_Desc_Cherry, TXT_Desc_Key
+		.word	TXT_Desc_Light, TXT_Desc_Spade, TXT_Desc_Cherry, TXT_Desc_Key, TXT_Ep4Msg, TXT_Yana02
 
 
 TxtDebug01:	.asciz	<1>" Свободно ЦП:"<2>"00000"<1>", ПП:"<2>"00000"<1>", эмуляция"
@@ -1065,8 +1065,10 @@ TXT_Msg3:	.asciz	<3>"Маловато будет"<12><3>"Копай дальше"
 TXT_Ep0End:	.asciz	<3>"Молодец.."<12><3>"Ложись спать"
 TXT_Ep1Msg:	.asciz	<1>"- Где-то во сне -"
 TXT_Ep2Msg:	.asciz	<7>"- Ночь продолжается -"
-TXT_Ep3Msg:	.asciz	<2>"- Тестовый -"
+TXT_Ep3Msg:	.asciz	<1>"- Где-то во сне -"
+TXT_Ep4Msg:	.asciz	<2>"- Тестовый -"
 TXT_Yana01:	.asciz	<1>"..проснись.."<12><1>"..сделай то, что должен"
+TXT_Yana02:	.asciz	<1>"Осторожнее,"<12><1>"перепрыгивай за мной"
 TXT_CantLight:	.asciz	<2>"А здесь всё освещено"
 
 TXT_Desc_Light:		.asciz	<2>"Фонарик немного освещает вокруг"<12><2>"При использовании осветит всё, но"<12><7>"лишь один раз"

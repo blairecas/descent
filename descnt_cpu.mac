@@ -256,6 +256,7 @@ MainClearPrepare:
 ; 3 - game episode prepare
 MainEpisodePrepare:
 	; modify global level according to episode (add|del obj, make passages etc)
+	; TODO: make tables for this thing and put them into VRAM
 	cmp	Episode, #2
 	bne	20$
 	; episode 2 - change boss to flashlight, remove light message, open door
@@ -263,7 +264,13 @@ MainEpisodePrepare:
 	call	ChangeGlobalObjects
 	mov	#ChgTileE0201, R5	; open door
 	call	ChangeGlobalTiles
-20$:	; episode items
+20$:	cmp	Episode, #4
+	bne	21$
+	; episode 4 - remove tomb transition
+	mov	#ChgObjE0401, R5
+	call	ChangeGlobalObjects
+21$:	;
+	; episode items
 	call	RestoreItems		; restore items if they were backed up
 	; episode variables
 	mov	Episode, R0
@@ -343,7 +350,7 @@ MainGame:
 	tst	KeyK2
 	beq	10$
 	clr	KeyK2
-	cmp	Episode, #3.		; max episode incl. test one
+	cmp	Episode, #MAX_EPISODES	; max episode incl. test one
 	bge	10$
 	call	NextEpisode
 10$:	; test for game over
@@ -2766,19 +2773,21 @@ DelayedMessage:	.word	0	; message # to show after delay a bit
 
 
 ; Episode init consts
-EListDream:	.byte	0,  1,  0,  0
-EListPlayerX:	.byte	200., 128., 200., 14.*16.
-EListPlayerY:	.byte	48., 64., 48., 8.*16.
-EListPlayerDir:	.byte	1, 1, 1, 0
-EListPlayerSpr:	.byte	5., 5., 5., 5.
-EListGlevX:	.byte	0., 0., 0., 0.
-EListGlevY:	.byte	0., 15., 0., 1.
+EListDream:	.byte	0,  1,  0,  1, 0
+EListPlayerX:	.byte	200., 128., 200., 4.*16., 14.*16.
+EListPlayerY:	.byte	48., 64., 48., 9.*16., 4.*16.
+EListPlayerDir:	.byte	1, 1, 1, 1, 1			; do not forget to change next line too!
+EListPlayerSpr:	.byte	5., 5., 5., 5., 5.
+EListGlevX:	.byte	0., 0., 0., 1., 0.
+EListGlevY:	.byte	0., 15., 0., 15., 3.
 		; need this for index = -1
 		.byte	TXTID_GAMEOVER
-EListMsg:	.byte	TXTID_EP0MSG, TXTID_EP1MSG, TXTID_EP2MSG, TXTID_EP3MSG
+EListMsg:	.byte	TXTID_EP0MSG, TXTID_EP1MSG, TXTID_EP2MSG, TXTID_EP3MSG, TXTID_EP4MSG
 ; episode object changes - 02 episode (glx,gly,objnum, [type|subtype],arg#0,arg#1,coords)
 ChgObjE0201:	.byte	0,0, 0, TOBJ_ITEM*32+ITEM_LIGHT, 10., 0, 3*16.+8.	; replace boss with flashlight
 		.byte	2,0, 0, 0,0,0,0						; remove 'need light' message
+		.byte	-1
+ChgObjE0401:	.byte	0,3, 0, 0,0,0,0						; remove tomb next episode object
 		.byte	-1
 		.even
 ; tile changing (global offset, new tile #)
@@ -2876,7 +2885,7 @@ EnemiesAttack:	.byte	8.		; spider 1
 		;	0   1   2   3   4   5   6   7   8   9
 TilesWeight:	.byte	0,  0,  0,  0,  0,  0,  0,  0,  0,  0	; 0
 		.byte	7,  7,  7,  7,  0,  0,  0,  0,  0,  3	; 10
-		.byte	3,  3,  3,  3,  0,  3,  3,  3,  3,  3	; 20
+		.byte	3,  3,  3,  3,  3,  3,  3,  3,  3,  3	; 20
 		.byte	0,  0,  0,  0,  0,  0,  2,  0,  1,  1	; 30
 		.byte	0,  0,  0,  0,  0,  0,  2,  0,  0,  0	; 40
 		.byte	0,  0,  0,  0,  0,  0,  0,  0,  0,  0	; 50
