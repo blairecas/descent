@@ -110,6 +110,7 @@ MainReset:
 	add	#FieldDX-7*2, R5
 	sob	R3, 10$
 	; prepare menu character walking
+	clr	playerFollower
 	mov	#80., PlayerX
 	mov	#16., PlayerY
 	clr	PlayerDir
@@ -271,12 +272,9 @@ MainEpisodePrepare:
 	mov	#30., playerSprAdj	; switch player sprite to Yana
 	inc	playerFollower		; set follower to Yan
 	clr	plCurFolIdx		; index in follower tables
-	; init follower tables for episode #3
-
 23$:	cmp	Episode, #4
-	bne	24$
-	; episode 4 - remove tomb transition
-	mov	#ChgObjE0401, R5
+	bne	24$	
+	mov	#ChgObjE0401, R5	; episode 4 - remove tomb transition
 	call	ChangeGlobalObjects
 24$:	;
 	; episode items
@@ -284,9 +282,9 @@ MainEpisodePrepare:
 	; episode variables
 	mov	Episode, R0
 	movb	EListDream(R0), EpisodeDream	; dreaming episodes?
-	beq	30$
+	beq	32$
 	call	BackupItems		; backup items before 'dream' episode
-30$:	; player vars prepare
+32$:	; player vars prepare
 	clr	playerX
 	clr	playerY
 	movb	EListPlayerX(R0), playerX
@@ -304,6 +302,7 @@ MainEpisodePrepare:
 	movb	EListGlevY(R0), glevelNewY	;
 	; vars init complete
 	call	InitLevelField		; init level
+	call	InitFollower		; init follower coords if any
 	; update item box (needed if dream state was changed)
 	call	UpdateItems		; draw player items
 	call	SelectNewItem
@@ -495,7 +494,8 @@ BufAllSprites:
 	mov	followerSpr(R2), drawSpr
 	mov	#drawObject, R0
 	call	BufferObject
-30$:	mov	(SP)+, EpisodeDream	; restore 'only blue draw'
+30$:	mov	(SP)+, R0		; restore 'only blue draw'
+	movb	R0, EpisodeDream
 	; process player flashing after drawing
 	tstb	playerFlashing
 	ble	50$
@@ -2872,6 +2872,13 @@ drawSpr:	.word	0
 drawX:		.word	0
 drawY:		.word	0
 
+playerSprAdj:	.word	0		; addition to sprite # for player
+playerFollower:	.word	0		; sprite # of a follower to player
+plCurFolIdx:	.word	0
+followerX:	.word	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; I know about .blkw ^_^
+followerY:	.word	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+followerSpr:	.word	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+
 playerObject:
 ; --- PLAYER ------------
 playerId:	.word	TOBJ_FRIEND	; player's ID, isn't he friend?
@@ -2896,13 +2903,6 @@ plActingArg1:	.word	0		; parameter 1 for usage (e.g. direction for spade)
 plActingArg2:	.word	0		; parameter 2 for usage (e.g. animation # for spade)
 ; -----------------------
 PlayerObjectEnd:
-
-playerSprAdj:	.word	0		; addition to sprite # for player
-playerFollower:	.word	0		; sprite # of a follower to player
-plCurFolIdx:	.word	0
-followerX:	.blkw	16.		; TODO: they are bytes in fact!
-followerY:	.blkw	16.
-followerSpr:	.blkw	16.
 
 ; player item objects [0..7] (selected with 1..8), low byte - item #, high byte - item count
 Items:		.word	0, 0, 0, 0, 0, 0, 0, 0
