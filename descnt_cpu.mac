@@ -255,21 +255,30 @@ MainClearPrepare:
 
 ; 3 - game episode prepare
 MainEpisodePrepare:
+	clr	playerSprAdj		; no adjustment to player sprite
+	clr	playerFollower		; no follower
 	; modify global level according to episode (add|del obj, make passages etc)
 	; TODO: make tables for this thing and put them into VRAM
 	cmp	Episode, #2
-	bne	20$
+	bne	22$
 	; episode 2 - change boss to flashlight, remove light message, open door
 	mov	#ChgObjE0201, R5	; replace boss to flashlight, remove 'need light' message
 	call	ChangeGlobalObjects
 	mov	#ChgTileE0201, R5	; open door
 	call	ChangeGlobalTiles
-20$:	cmp	Episode, #4
-	bne	21$
+22$:	cmp	Episode, #3
+	bne	23$
+	mov	#30., playerSprAdj	; switch player sprite to Yana
+	inc	playerFollower		; set follower to Yan
+	clr	plCurFolIdx		; index in follower tables
+	; init follower tables for episode #3
+
+23$:	cmp	Episode, #4
+	bne	24$
 	; episode 4 - remove tomb transition
 	mov	#ChgObjE0401, R5
 	call	ChangeGlobalObjects
-21$:	;
+24$:	;
 	; episode items
 	call	RestoreItems		; restore items if they were backed up
 	; episode variables
@@ -453,16 +462,46 @@ BufAllSprites:
 	movb	playerFlashing, R0	; set 'dream' as flashing bit
 	bic	#^B1111111111111011, R0
 	movb	R0, EpisodeDream
-10$:	; buffer it
+10$:	; draw player
+	mov	playerSpr, R1
+	mov	R1, -(SP)
+	; save player sprite and coordinates for a follower
+	tst	playerFollower
+	beq	20$
+	mov	plCurFolIdx, R2
+	bic	#^B1111111111110000, R2	; 16 moves to save maximum
+	asl	R2
+	mov	playerX, followerX(R2)
+	mov	playerY, followerY(R2)
+	dec	R1			; player sprite # from zero
+	add	playerFollower, R1	; follower sprite #
+	mov	R1, followerSpr(R2)
+	inc	plCurFolIdx
+20$:	; buffer it
 	mov	#playerObject, R0
+	add	playerSprAdj, playerSpr
 	call	BufferObject
-	mov	(SP)+, R0
-	movb	R0, EpisodeDream
+	; restore player sprite (if was changed)
+	mov	(SP)+, playerSpr
+	; draw follower if any
+	tst	playerFollower
+	beq	30$
+	mov	plCurFolIdx, R2
+	sub	#15., R2
+	bic	#^B1111111111110000, R2	; 16 moves only
+	asl	R2
+	mov	followerX(R2), drawX
+	mov	followerY(R2), drawY
+	mov	followerSpr(R2), drawSpr
+	mov	#drawObject, R0
+	call	BufferObject
+30$:	mov	(SP)+, EpisodeDream	; restore 'only blue draw'
 	; process player flashing after drawing
 	tstb	playerFlashing
-	ble	20$
+	ble	50$
 	decb	playerFlashing
-20$:	return
+50$:	; end of player drawing
+	return
 
 
 ; buffer currently using item
@@ -1542,7 +1581,23 @@ ProcessPlayerOut:
 	clr	playerY
 	incb	glevelNewY	
 90$:	call	InitLevelField
+	call	InitFollower
 	call	RedrawFull
+99$:	return
+
+
+; initialize follower coordinates to player
+InitFollower:
+	tst	playerFollower
+	beq	99$
+	clr	R0
+	mov	#16., R3
+10$:	mov	playerX, followerX(R0)
+	mov	playerY, followerY(R0)
+	mov	playerSpr, followerSpr(R0)
+	inc	R0
+	inc	R0
+	sob	R3, 10$
 99$:	return
 
 
@@ -2758,6 +2813,7 @@ TestSoundNum:	.byte	1	; sound test number
 EpisodeDream:	.byte	0	; game episode is in dream mode (sprite colors will be only plane 0)
 ItemsWereBkp:	.byte	0	; <>0 - items were backed up (for 'dream' episode)
 PlayerFlashing:	.byte	0	; <>0 - player are flashing blue (taking damage)
+HaveFollower:	.byte	0	; sprite # if player is following by him
 
 glevelX:	.byte	0
 glevelY:	.byte	0
@@ -2840,6 +2896,13 @@ plActingArg1:	.word	0		; parameter 1 for usage (e.g. direction for spade)
 plActingArg2:	.word	0		; parameter 2 for usage (e.g. animation # for spade)
 ; -----------------------
 PlayerObjectEnd:
+
+playerSprAdj:	.word	0		; addition to sprite # for player
+playerFollower:	.word	0		; sprite # of a follower to player
+plCurFolIdx:	.word	0
+followerX:	.blkw	16.		; TODO: they are bytes in fact!
+followerY:	.blkw	16.
+followerSpr:	.blkw	16.
 
 ; player item objects [0..7] (selected with 1..8), low byte - item #, high byte - item count
 Items:		.word	0, 0, 0, 0, 0, 0, 0, 0
