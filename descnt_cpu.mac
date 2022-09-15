@@ -16,7 +16,7 @@
 @include inc_common.mac
 @include inc_cpu_header.mac
 
-	mtps	#600			; PSW - HP**TNZVC (010000000)
+	mtps	#200			; PSW - HP**TNZVC (010000000)
 	mov	#1000, SP		; stack is 500..776(8)
 
 	; disable serial adapters interrupts
@@ -110,7 +110,7 @@ MainReset:
 	add	#FieldDX-7*2, R5
 	sob	R3, 10$
 	; prepare menu character walking
-	clr	playerFollower
+	clr	PlayerFollower
 	mov	#80., PlayerX
 	mov	#16., PlayerY
 	clr	PlayerDir
@@ -257,7 +257,7 @@ MainClearPrepare:
 ; 3 - game episode prepare
 MainEpisodePrepare:
 	clr	playerSprAdj		; no adjustment to player sprite
-	clr	playerFollower		; no follower
+	clr	PlayerFollower		; no follower
 	; modify global level according to episode (add|del obj, make passages etc)
 	; TODO: make tables for this thing and put them into VRAM
 	cmp	Episode, #2
@@ -270,7 +270,8 @@ MainEpisodePrepare:
 22$:	cmp	Episode, #3
 	bne	23$
 	mov	#30., playerSprAdj	; switch player sprite to Yana
-	inc	playerFollower		; set follower to Yan
+	dec	PlayerFollower		; -1 - set follower to Yan (1), but not moving!
+	call	InitEp03Follower	; init Yan following coords
 	clr	plCurFolIdx		; index in follower tables
 23$:	cmp	Episode, #4
 	bne	24$	
@@ -302,7 +303,6 @@ MainEpisodePrepare:
 	movb	EListGlevY(R0), glevelNewY	;
 	; vars init complete
 	call	InitLevelField		; init level
-	call	InitFollower		; init follower coords if any
 	; update item box (needed if dream state was changed)
 	call	UpdateItems		; draw player items
 	call	SelectNewItem
@@ -335,7 +335,13 @@ MainEpisodeBeforePlay:
 	mov	#TOBJ_FRIEND*256.+TSUB_BOSS, R1
 	mov	#TXTID_MSG1, R5
 	call	EventShowMessage
-10$:	inc	CurrentMode		; next mode - > main game cycle
+10$:	cmp	Episode, #3
+	bne	30$
+	clr	R1
+	mov	#TXTID_YANA02, R5	; show Yana message for 'dream #2' episode
+	call	EventShowMessage
+	mov	#1, PlayerFollower	; set follower to Yan (again) but allow moving
+30$:	inc	CurrentMode		; next mode - > main game cycle
 	return
 
 	
@@ -465,15 +471,15 @@ BufAllSprites:
 	mov	playerSpr, R1
 	mov	R1, -(SP)
 	; save player sprite and coordinates for a follower
-	tst	playerFollower
-	beq	20$
+	tst	PlayerFollower		; save follower if >0
+	ble	20$			; when negative - it must stop saving coords (e.g. for messages screen redrawing)
 	mov	plCurFolIdx, R2
 	bic	#^B1111111111110000, R2	; 16 moves to save maximum
 	asl	R2
 	mov	playerX, followerX(R2)
 	mov	playerY, followerY(R2)
 	dec	R1			; player sprite # from zero
-	add	playerFollower, R1	; follower sprite #
+	add	PlayerFollower, R1	; follower sprite #
 	mov	R1, followerSpr(R2)
 	inc	plCurFolIdx
 20$:	; buffer it
@@ -486,7 +492,6 @@ BufAllSprites:
 	tst	playerFollower
 	beq	30$
 	mov	plCurFolIdx, R2
-	sub	#15., R2
 	bic	#^B1111111111110000, R2	; 16 moves only
 	asl	R2
 	mov	followerX(R2), drawX
@@ -1581,24 +1586,44 @@ ProcessPlayerOut:
 	clr	playerY
 	incb	glevelNewY	
 90$:	call	InitLevelField
-	call	InitFollower
+	call	ResetFollower
 	call	RedrawFull
 99$:	return
 
 
-; initialize follower coordinates to player
-InitFollower:
+; initialize follower coordinates and spr# to player
+ResetFollower:
 	tst	playerFollower
 	beq	99$
-	clr	R0
-	mov	#16., R3
+	mov	#32.-2., R0			; last word of follower's buffer
 10$:	mov	playerX, followerX(R0)
 	mov	playerY, followerY(R0)
 	mov	playerSpr, followerSpr(R0)
-	inc	R0
-	inc	R0
-	sob	R3, 10$
+	dec	R0
+	dec	R0
+	bge	10$
 99$:	return
+
+
+; initialize EP03 player following
+InitEp03Follower:
+	mov	#32.-2., R0			; last word of follower's buffer
+	mov	#4.*16.-2., R1			; X coord of Yana - 2
+	clr	R2				; animation index
+10$:	mov	#9.*16., followerY(R0)
+	mov	R1, followerX(R0)
+	dec	R1
+	dec	R1
+	mov	#2., R4				; base sprite of Yan
+	movb	SPPAniTable(R2), R5		; animation addition
+	add	R5, R4				; current animation of Yan
+	mov	R4, followerSpr(R0)		; put it to follower spr #
+	dec	R2				; decrease animation (going backwards)
+	bic	#^B1111111111111100, R2		; mask for max 4 of animations
+	dec	R0
+	dec	R0
+	bge	10$
+	return
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -2813,7 +2838,6 @@ TestSoundNum:	.byte	1	; sound test number
 EpisodeDream:	.byte	0	; game episode is in dream mode (sprite colors will be only plane 0)
 ItemsWereBkp:	.byte	0	; <>0 - items were backed up (for 'dream' episode)
 PlayerFlashing:	.byte	0	; <>0 - player are flashing blue (taking damage)
-HaveFollower:	.byte	0	; sprite # if player is following by him
 
 glevelX:	.byte	0
 glevelY:	.byte	0
@@ -2828,14 +2852,14 @@ HaveKeys:	.byte	0	; <>0 - player have key(s)
 DelayedMessage:	.word	0	; message # to show after delay a bit
 
 
-; Episode init consts
-EListDream:	.byte	0,  1,  0,  1, 0
+; Episode init consts 20810/14892
+EListDream:	.byte	   0,    1,    0,      1,       0
 EListPlayerX:	.byte	200., 128., 200., 4.*16., 14.*16.
-EListPlayerY:	.byte	48., 64., 48., 9.*16., 4.*16.
-EListPlayerDir:	.byte	1, 1, 1, 1, 1			; do not forget to change next line too!
-EListPlayerSpr:	.byte	5., 5., 5., 5., 5.
-EListGlevX:	.byte	0., 0., 0., 1., 0.
-EListGlevY:	.byte	0., 15., 0., 15., 3.
+EListPlayerY:	.byte	 48.,  64.,  48., 9.*16.,  4.*16.
+EListPlayerDir:	.byte	   1,    1,    1,      1,       1	; do not forget to change next line too!
+EListPlayerSpr:	.byte	  5.,   5.,   5.,     5.,      5.
+EListGlevX:	.byte	  0.,   0.,   0.,     1.,      0.
+EListGlevY:	.byte	  0.,  15.,   0.,    15.,      3.
 		; need this for index = -1
 		.byte	TXTID_GAMEOVER
 EListMsg:	.byte	TXTID_EP0MSG, TXTID_EP1MSG, TXTID_EP2MSG, TXTID_EP3MSG, TXTID_EP4MSG
@@ -2872,9 +2896,9 @@ drawSpr:	.word	0
 drawX:		.word	0
 drawY:		.word	0
 
+PlayerFollower:	.word	0		; base spr # of player follower (0 if none, <0 - stop following)
 playerSprAdj:	.word	0		; addition to sprite # for player
-playerFollower:	.word	0		; sprite # of a follower to player
-plCurFolIdx:	.word	0
+plCurFolIdx:	.word	0		; current index in follower table
 followerX:	.word	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0	; I know about .blkw ^_^
 followerY:	.word	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 followerSpr:	.word	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
