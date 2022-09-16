@@ -272,10 +272,9 @@ SNDSTA:	mtps	#200			; stop interrupts just in case
 	mov	#SndIntPause, @#304	; set sound interrupt to pause
 	mov	#SND_PAUSE_TIMER, @#177712
 	br	30$
-10$:	bic	#200, @#177716		; low signal to speaker
+10$:	clr	@#177716		; low signal to speaker
 	mov	#SndIntHi, @#304	; set next sound interrupt to high signal proc
-	movb	SndLLo+1, @#20$+2	; low signal duration (only high-byte is used)
-20$:	mov	#000000, @#177712	; timer counter
+	mov	SndLLo, @#177712	; low signal duration
 30$:	tst	@#177714
 	tst	@#177714
 	bis	#^B01000101, @#177710	; allow int, start, timer = 8mks
@@ -311,33 +310,27 @@ SndIntPause:
 	bne	10$
 	; no next effect - stop timer
 	clr	@#177710
-	tst	@#177714
-	tst	@#177714
-	rti
-10$:	cmp	SndType, #SND_PAUSE	; still pause?
-	beq	90$
-	; normal tone
-	mov	#SndIntLo, @#304	; set interrupt to low tick
-	movb	SndLLo+1, @#22$+2	; only high-byte used
-22$:	mov	#000000, @#177712
-	tst	@#177714
-	tst	@#177714
-	rti
+	br	99$
+10$:	; normal tone
+	; clr	@#177716		; do we need to set it here? must already be at low
+	mov	#SndIntHi, @#304	; set interrupt to high tick
+	mov	SndLLo, @#177712
+	br	99$
 	; still pause
 90$:	mov	#SND_PAUSE_TIMER, @#177712	; set default pause timer
-	tst	@#177714
+99$:	tst	@#177714
 	tst	@#177714
 	rti
 
 
 ; PP timer interrupts for sounds
 SndIntLo:
-	bic	#200, @#177716		; set 
+	clr	@#177716		; set low signal
 	mov	#SndIntHi, @#304	; set next interrupt to high-level version
 	; cycle without changes to low|high durations
 	decb	SndIntLCnt+1		; (!) only h-byte is used
 	bne	90$
-	; change durations of low|high
+	; change durations of low|high|local count
 	add	SndLDl, SndLLo		; additions to low|high durations
 	add	SndLDh, SndLHi		;
 	add	SndLDCnt, SndLCnt	; addition to local cycles count
@@ -354,27 +347,21 @@ SndIntLo:
 	bne	10$
 	; no next effect - stop timer
 	clr	@#177710
-	tst	@#177714
-	tst	@#177714
-	rti
-10$:	; is it pause
-	cmp	SndType, #SND_PAUSE
+	br	99$
+10$:	cmp	SndType, #SND_PAUSE	; is it pause?
 	bne	90$
 	mov	#SndIntPause, @#304	; set sound interrupt to pause
 	mov	#SND_PAUSE_TIMER, @#177712
-	tst	@#177714
-	tst	@#177714
-	rti
-90$:	movb	SndLLo+1, @#92$+2	; only high-byte used
-92$:	mov	#000000, @#177712
-	tst	@#177714
+	br	99$
+90$:	mov	SndLLo, @#177712
+99$:	tst	@#177714
 	tst	@#177714
 	rti
+
 SndIntHi:
-	bis	#200, @#177716
+	mov	#200, @#177716		; set high level
 	mov	#SndIntLo, @#304	; next tick will be low
-	movb	SndLHi+1, @#92$+2
-92$:	mov	#000000, @#177712
+	mov	SndLHi, @#177712
 	tst	@#177714
 	tst	@#177714
 	rti
@@ -423,15 +410,13 @@ MUSPRO:	tst	MUSCUR			; current note addr
 	mov	NOTPAD(R1), R1		; note delays initial
 	mov	R1, MusCountHi+2
 	mov	R1, MusCountLo+2
+	mov	#200, MusIntHi+2	; set #200 in high in case we cleared it
 	mov	R1, @#177712		; set music interrupt timer
 	tst	@#177714		; maybe better way here is  
 	tst	@#177714		; TST @#177714, BNE .-4
-	mov	#200, MusIntLo+2	; set #200 in bis/bic
-	mov	#200, MusIntHi+2	; in case we cleared it
 	br	99$
 10$:	; stop ticking beeper
-	clr	MusIntLo+2		; clear #200 in bis/bic
-	clr	MusIntHi+2		; so it will not tick beeper
+	clr	MusIntHi+2		; clear #200 - so it will not tick high
 	br	99$
 20$:	; stop playing
 	call	PPTINI			; init PP timer
@@ -441,17 +426,17 @@ MUSPRO:	tst	MUSCUR			; current note addr
 
 ; timer interrupts (for tones)
 MusIntLo:
-	bic	#200, @#177716		; tick low level
+	clr	@#177716		; tick low level
 	mov	#MusIntHi, @#304	; set next interrupt to high-level version
 MusCountLo:
 	mov	#000000, @#177712	; set new timer as duty changed
-	add	#2, MusCountLo+2	; change duty (maybe add 2?)
+	add	#2, MusCountLo+2	; change duty
 	tst	@#177714		; TWO (!) times is important I think
 	tst	@#177714
 	rti
 ; same as above just for high signal level
 MusIntHi:
-	bis	#200, @#177716
+	mov	#200, @#177716		; (!) self-modifying 
 	mov	#MusIntLo, @#304
 MusCountHi:
 	mov	#000000, @#177712
@@ -980,33 +965,33 @@ SND_PAUSE_TIMER	= 50*256
 ;	Hi = high signal length
 ;       Dh = addition to Hi
 ; jump
-SND001:	.word	SND_TONE, 20, 01*256, 0, 125*256, -5*256,  125*256, -5*256
+SND001:	.word	SND_TONE, 20, 01*256, 0,	125, -5,  125, -5
 	.word	0
 ; spadeing
-SND002:	.word	SND_TONE, 05, 01*256, 0, 10*256, +01*256,  100*256, -15*256
+SND002:	.word	SND_TONE, 05, 01*256, 0,	10, 1, 100, -15
 	.word	0
 ; add item
-SND003:	.word	SND_TONE, 04, 25*256, -4*256, 40*256, 20*256, 35*256, 20*256
+SND003:	.word	SND_TONE, 04, 25*256, -4*256,	40, 20, 35, 20
 	.word	0
 ; eat item
-SND004:	.word	SND_TONE, 06, 10*256, -1*256, 50*256, 10*256, 30*256, 20*256
-	.word	SND_TONE, 04, 2*256, 2*256, 120*256, -10*256, 120*256, -20*256
+SND004:	.word	SND_TONE, 06, 10*256, -1*256,	50, 10, 30, 20
+	.word	SND_TONE, 04, 2*256, 2*256,	120, -10, 120, -20
 	.word	0
 ; remove item
-SND005:	.word	SND_TONE, 04, 8*256, +2*256, 124*256, -20*256, 114*256, -18*256
+SND005:	.word	SND_TONE, 04, 8*256, 2*256,	124, -20, 114, -18
 	.word	0
 ; message box
-SND006:	.word	SND_TONE, 1, 10*256, 0, 15000, 0, 15000, 0
+SND006:	.word	SND_TONE, 1, 10*256, 0,		60, 0, 60, 0
 	.word	SND_PAUSE, 10
-	.word	SND_TONE, 1, 16*256, 0, 15000, 0, 15000, 0
+	.word	SND_TONE, 1, 16*256, 0,		60, 0, 60, 0
 	.word	0
 ; test
-SND007:	.word	SND_TONE, 1, 6*256,  0, 156*256,  0, 156*256, 0
-	.word	SND_TONE, 1, 9*256,  0, 104*256,  0, 104*256, 0
-	.word	SND_TONE, 1, 12*256, 0, 78*256,   0, 78*256, 0
-	.word	SND_TONE, 1, 6*256,  0, 62*256,  0, 250*256, 0
-	.word	SND_TONE, 1, 9*256,  0, 28*256,  0, 180*256, 0
-	.word	SND_TONE, 1, 12*256, 0, 26*256,  0, 130*256, 0
+SND007:	.word	SND_TONE, 1, 6*256,  0, 	156, 0, 156, 0
+	.word	SND_TONE, 1, 9*256,  0,		104, 0, 104, 0
+	.word	SND_TONE, 1, 12*256, 0,		78,  0, 78,  0
+	.word	SND_TONE, 1, 6*256,  0,		62,  0, 250, 0
+	.word	SND_TONE, 1, 9*256,  0,		28,  0, 180, 0
+	.word	SND_TONE, 1, 12*256, 0,		26,  0, 130, 0
 	.word	0
 
 .radix 8

@@ -3014,13 +3014,6 @@ END:
 
 @include inc_levels.mac
 
-; episode's item list
-;EpisodeItems:	.byte	0		; EP00
-;		.byte	0		; EP01
-;		.byte	ITEM_SPADE, 0	; EP02
-;		.byte	ITEM_SPADE, 0	; EP03
-;		.byte	0		; EP04
-
 ; First-time taken items's message IDs
 ItemMessage:
 	.byte	0, TXTID_DESC_LIGHT, TXTID_DESC_SPADE, TXTID_DESC_CHERRY, 
