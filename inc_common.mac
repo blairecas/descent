@@ -156,6 +156,7 @@ TXTID_DESC_KEY	= 23.
 TXTID_EP4MSG	= 24.
 TXTID_YANA02	= 25.
 TXTID_YANA03	= 26.
+TXTID_YAN01	= 27.
 
 ; //////////////////////////////////////////////////////////////////////////////	
 ; // CPU<->PPU exchange variables

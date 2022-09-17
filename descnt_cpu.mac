@@ -448,7 +448,12 @@ FadeInOutTick:
 ; next episode preparation
 NextEpisode:
 	inc	Episode			; next episode
-	call	PrepareFade		; prepare fadeout vars
+	cmp	Episode, #3.		; special message for #3 episode
+	bne	10$
+	clr	R1			; show at player coords
+	mov	#TXTID_YAN01, R5
+	call	EventShowMessage
+10$:	call	PrepareFade		; prepare fadeout vars
 	inc	CurrentMode		; set next game mode to fade out
 	return
 
