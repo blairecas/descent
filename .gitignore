@@ -1,9 +1,4 @@
-_descnt_cpu.dat
-_descnt_cpu.lst
-_descnt_cpu.mac
-_descnt_ppu.dat
-_descnt_ppu.lst
-_descnt_ppu.mac
-_descnt_r00.dat
-_descnt_r12.dat
-_descnt.lst
+*.log
+_*.*
+system.dsk
+rt11.exe
