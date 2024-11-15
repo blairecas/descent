@@ -3,7 +3,7 @@ echo.
 echo ===========================================================================
 echo Compiling graphics
 echo ===========================================================================
-..\..\php5\php.exe -c ..\..\php5\ -f conv_spr.php
+php -f conv_spr.php
 if %ERRORLEVEL% NEQ 0 ( exit /b )
 move /y graphics\inc_cpu_sprites.mac inc_cpu_sprites.mac >NUL
 move /y graphics\inc_ppu_sprites.mac inc_ppu_sprites.mac >NUL
@@ -12,36 +12,36 @@ echo.
 echo ===========================================================================
 echo Compiling DESCNT_CPU.MAC
 echo ===========================================================================
-..\..\php5\php.exe -c ..\..\php5\ -f preprocess.php descnt_cpu.mac
+php -f preprocess.php descnt_cpu.mac
 if %ERRORLEVEL% NEQ 0 ( exit /b )
-..\..\macro11\macro11.exe -ysl 32 -yus -m ..\..\macro11\sysmac.sml -l _descnt_cpu.lst _descnt_cpu.mac
+..\scripts\macro11 -ysl 32 -yus -m ..\scripts\sysmac.sml -l _descnt_cpu.lst _descnt_cpu.mac
 if %ERRORLEVEL% NEQ 0 ( exit /b )
 
 echo.
 echo ===========================================================================
 echo Compiling DESCNT_PPU.MAC
 echo ===========================================================================
-..\..\php5\php.exe -c ..\..\php5\ -f conv_level.php
-..\..\php5\php.exe -c ..\..\php5\ -f preprocess.php descnt_ppu.mac
+php -f conv_level.php
+php -f preprocess.php descnt_ppu.mac
 if %ERRORLEVEL% NEQ 0 ( exit /b )
-..\..\macro11\macro11.exe -ysl 32 -yus -m ..\..\macro11\sysmac.sml -l _descnt_ppu.lst _descnt_ppu.mac
+..\scripts\macro11 -ysl 32 -yus -m ..\scripts\sysmac.sml -l _descnt_ppu.lst _descnt_ppu.mac
 if %ERRORLEVEL% NEQ 0 ( exit /b )
 
 echo.
 echo ===========================================================================
 echo Creating *.DAT RAM images
 echo ===========================================================================
-..\..\php5\php.exe -c ..\..\php5\ -f gen_overlay.php
+php -f gen_overlay.php
 if %ERRORLEVEL% NEQ 0 ( exit /b )
 
 echo.
 echo ===========================================================================
 echo Compressing, Aligning to 512-bytes size, Updating .DSK
 echo ===========================================================================
-..\packers\lzsa3.exe _descnt_cpu.dat descpu.dat
-..\packers\lzsa3.exe _descnt_ppu.dat desppu.dat
-..\packers\lzsa3.exe _descnt_r12.dat desr12.dat
-..\packers\lzsa3.exe _descnt_r00.dat desr00.dat
+..\scripts\lzsa3.exe _descnt_cpu.dat descpu.dat
+..\scripts\lzsa3.exe _descnt_ppu.dat desppu.dat
+..\scripts\lzsa3.exe _descnt_r12.dat desr12.dat
+..\scripts\lzsa3.exe _descnt_r00.dat desr00.dat
 rem -- align files with 512-bytes (block)
 powershell -Command "& { $f = new-object System.IO.FileStream descpu.dat, Open, ReadWrite; if (($f.Length %% 512) -ne 0) { $f.SetLength($f.Length + 512 - ($f.Length %% 512)); } $f.Close(); }"
 powershell -Command "& { $f = new-object System.IO.FileStream desppu.dat, Open, ReadWrite; if (($f.Length %% 512) -ne 0) { $f.SetLength($f.Length + 512 - ($f.Length %% 512)); } $f.Close(); }"
@@ -64,4 +64,14 @@ move /y descpu.dat release\descpu.dat >NUL
 move /y desppu.dat release\desppu.dat >NUL
 move /y desr12.dat release\desr12.dat >NUL
 move /y desr00.dat release\desr00.dat >NUL
+
+del _descnt_cpu.mac
+del _descnt_ppu.mac
+del _descnt_cpu.dat
+del _descnt_ppu.dat
+del _descnt_r00.dat
+del _descnt_r12.dat
+
+@run_ukncbtl.bat
+
 echo.

@@ -523,24 +523,22 @@ PPSEN:	mov	R0, -(SP)
 ; R4 - start addr in CPU
 ; R5 - length / 2
 PPRUN:	movb	#1, PPCMD	; 1 - allocate memory
-	mov	R5, PPLEN
+	mov	R5, PPACP	; (!) length to PPACP (not to PPLEN)
 	call	PPSEN
 	tstb	PPARR		; test if allocate success
 	beq	1$		; 0 - OK
 	.print	#MSG010
 	.exit			; fatal error - out of memory in PPU
 1$:	movb	#20, PPCMD	; 20 - write to PPU mem
-	mov	R5, PPLEN
 	mov 	R4, PPACP
+	mov	R5, PPLEN
 	call	PPSEN
 	movb	#30, PPCMD	; 30 - run
-	call	PPSEN
-	return
+	br	PPSEN
 
 ; release PPU memory in case of something..
 PPRELE:	movb	#2, PPCMD	; 2 - release memory
-	call	PPSEN
-	return
+	br	PPSEN
 
 
 ; //////////////////////////////////////////////////////////////////////////////	

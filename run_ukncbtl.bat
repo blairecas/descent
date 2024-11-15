@@ -1,0 +1,1 @@
+start ..\..\ukncbtl\ukncbtl /autostart /disk0:..\..\00_code\descent\descnt.dsk /boot1

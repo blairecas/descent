@@ -1,8 +1,9 @@
 	.title	DESCPU
-	.enabl	LC,AMA	; local labels, absolute addr mode (important)
+	.enabl	LC, AMA	; local labels, absolute addr mode (important)
 	.list	MEB	; enable macro-extensions binary listing
+
 	.asect
-.=0	; from address 0 (!)
+	.=0		; from address 0 (!)
 	
 ; custom linker, use macroses with caution
 ; .ENABL AMA is important for absolute addrs with macro11.exe (!)
@@ -18,15 +19,6 @@
 
 	mtps	#200			; PSW - HP**TNZVC (010000000)
 	mov	#1000, SP		; stack is 500..776(8)
-
-	; disable serial adapters interrupts
-	;bic	#100, @#176560		; network, input
-	;bic	#100, @#176564		; network, output
-	bic	#100, @#176570		; rs-232, input
-	bic	#100, @#176574		; rs-232, output
-	; trap register, disable interrupts
-	; emustudio is using it - so it's commented here
-	;mov	#0, @#176644
 
 	; clear CPU upper RAM
 	mov	#END, R0
@@ -69,7 +61,8 @@ MainCycle:
 	jmp	MainCycle
 
 MainCycleTable:	
-	.WORD	MainReset, MainMenu, MainClearPrepare, MainEpisodePrepare, MainScreenUp, MainEpisodeBeforePlay, MainGame, MainFadeOut, MainOverPrepare, MainOver, MainNextEpisode
+	.word	MainReset, MainMenu, MainClearPrepare, MainEpisodePrepare, MainScreenUp, MainEpisodeBeforePlay
+	.word	MainGame, MainFadeOut, MainOverPrepare, MainOver, MainNextEpisode
 
 
 ; Menu Tiles - Id1, Id2, Id3 ... 
