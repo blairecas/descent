@@ -557,9 +557,10 @@ PPUSTA:	mov	PC, R0
 	add	#10, R0			; align addr with 8. bytes
 	bic	#7, R0
 	mov	R0, R2			; save addr and use later
-	; 1st element - set palette (YRGB YRGB YRGB YRGB)
-	mov	#^B1101110010011000, (R0)+
-	mov	#^B1111111010111010, (R0)+
+	; 1st element - palette (YRGB YRGB YRGB YRGB), all black:
+	; the packed data is unpacked in video memory and must not be seen
+	clr	(R0)+
+	clr	(R0)+
 	clr	(R0)+			; vaddr is not used here
 	mov	R0, (R0)		; next element addr
 	add	#2, (R0)

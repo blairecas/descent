@@ -81,6 +81,7 @@ MainReset:
 	clr	R0
 	.ppexe	#CmdFillScreen		; clear screen plane-0
 	call	ClearScreen		; clear screen planes-1,2
+	call	SetColors		; palette is black until the screen is clear
 	; variables from reset
 	mov	#2., VSyncX		; game speed - #2 of 50Hz sync interrupt (25fps)
 	movb	#1., TestSoundNum
@@ -2767,7 +2768,10 @@ CheckColors:
 	bne	10$
 	return
 10$:	clr	KeyK1
-	comb	RgbMode	
+	comb	RgbMode
+; set palette by RgbMode
+SetColors:
+	tstb	RgbMode
 	bne	20$
 	mov	#^B1101110010011000, R0 ; swap R&G bits
 	mov	#^B1111111010111010, R1

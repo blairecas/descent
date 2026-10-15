@@ -28,8 +28,8 @@ START:	; set PSW (HP**TNZVC) = 110000000 (HP=11, disable interrupts, halt mode, 
 
 ; 001010 - lines table begin
 VLinesBegin:
-	.word	^B1101110010011000	; 001010 YRGB for 011 010 001 000
-	.word	^B1111111010111010	; 001012 YRGB for 111 110 101 100
+	.word	0			; 001010 palette is black until MainReset clears the screen
+	.word	0			; 001012 (video memory still holds the unpacked data)
 	.word	0, 1022			; 001014
 	.word	^B0000000000010000	; 001020 no cursor
 	.word	^B0000000000010111	; 001022 320x288, max luminance (..000111-640 ..010111-320 ..100111-160 ..110111-80)
